@@ -1,0 +1,87 @@
+[
+  {
+    "model": "catalog.musicset",
+    "pk": 1,
+    "fields": {
+      "slug": "pop-2010s",
+      "name": "Pop Hits 2010s",
+      "description": "Placeholder set. Real curation per PRD Open Question #4."
+    }
+  },
+  {
+    "model": "catalog.musicset",
+    "pk": 2,
+    "fields": {
+      "slug": "rock-classics",
+      "name": "Rock Classics",
+      "description": "Placeholder set. Real curation per PRD Open Question #4."
+    }
+  },
+  {
+    "model": "catalog.musicset",
+    "pk": 3,
+    "fields": {
+      "slug": "polish-hits",
+      "name": "Polish Hits",
+      "description": "Placeholder set. Real curation per PRD Open Question #4."
+    }
+  },
+  {
+    "model": "catalog.musicset",
+    "pk": 4,
+    "fields": {
+      "slug": "dance-hits",
+      "name": "Dance Floor Hits",
+      "description": "Placeholder set. Real curation per PRD Open Question #4."
+    }
+  },
+  {
+    "model": "catalog.musicset",
+    "pk": 5,
+    "fields": {
+      "slug": "indie-mix",
+      "name": "Indie Mix",
+      "description": "Placeholder set. Real curation per PRD Open Question #4."
+    }
+  },
+
+  {"model": "catalog.track", "pk": 101, "fields": {"music_set": 1, "spotify_track_id": "pop2010s00000000000001", "artist": "Adele",        "title": "Rolling in the Deep",    "duration_ms": 228000}},
+  {"model": "catalog.track", "pk": 102, "fields": {"music_set": 1, "spotify_track_id": "pop2010s00000000000002", "artist": "Bruno Mars",   "title": "Uptown Funk",            "duration_ms": 270000}},
+  {"model": "catalog.track", "pk": 103, "fields": {"music_set": 1, "spotify_track_id": "pop2010s00000000000003", "artist": "Taylor Swift", "title": "Shake It Off",           "duration_ms": 219000}},
+  {"model": "catalog.track", "pk": 104, "fields": {"music_set": 1, "spotify_track_id": "pop2010s00000000000004", "artist": "Ed Sheeran",   "title": "Shape of You",           "duration_ms": 233000}},
+  {"model": "catalog.track", "pk": 105, "fields": {"music_set": 1, "spotify_track_id": "pop2010s00000000000005", "artist": "Lady Gaga",    "title": "Bad Romance",            "duration_ms": 295000}},
+  {"model": "catalog.track", "pk": 106, "fields": {"music_set": 1, "spotify_track_id": "pop2010s00000000000006", "artist": "Maroon 5",     "title": "Sugar",                  "duration_ms": 235000}},
+  {"model": "catalog.track", "pk": 107, "fields": {"music_set": 1, "spotify_track_id": "pop2010s00000000000007", "artist": "Katy Perry",   "title": "Roar",                   "duration_ms": 223000}},
+
+  {"model": "catalog.track", "pk": 201, "fields": {"music_set": 2, "spotify_track_id": "rockclassics0000000001", "artist": "Queen",              "title": "Bohemian Rhapsody",     "duration_ms": 354000}},
+  {"model": "catalog.track", "pk": 202, "fields": {"music_set": 2, "spotify_track_id": "rockclassics0000000002", "artist": "Led Zeppelin",       "title": "Stairway to Heaven",    "duration_ms": 482000}},
+  {"model": "catalog.track", "pk": 203, "fields": {"music_set": 2, "spotify_track_id": "rockclassics0000000003", "artist": "The Rolling Stones", "title": "Paint It Black",        "duration_ms": 202000}},
+  {"model": "catalog.track", "pk": 204, "fields": {"music_set": 2, "spotify_track_id": "rockclassics0000000004", "artist": "AC/DC",              "title": "Back in Black",         "duration_ms": 255000}},
+  {"model": "catalog.track", "pk": 205, "fields": {"music_set": 2, "spotify_track_id": "rockclassics0000000005", "artist": "Nirvana",            "title": "Smells Like Teen Spirit","duration_ms": 301000}},
+  {"model": "catalog.track", "pk": 206, "fields": {"music_set": 2, "spotify_track_id": "rockclassics0000000006", "artist": "Pink Floyd",         "title": "Wish You Were Here",    "duration_ms": 334000}},
+  {"model": "catalog.track", "pk": 207, "fields": {"music_set": 2, "spotify_track_id": "rockclassics0000000007", "artist": "Guns N' Roses",      "title": "Sweet Child O' Mine",   "duration_ms": 356000}},
+
+  {"model": "catalog.track", "pk": 301, "fields": {"music_set": 3, "spotify_track_id": "polishhits000000000001", "artist": "Maanam",         "title": "Boskie Buenos",     "duration_ms": 245000}},
+  {"model": "catalog.track", "pk": 302, "fields": {"music_set": 3, "spotify_track_id": "polishhits000000000002", "artist": "Republika",      "title": "Kombinat",          "duration_ms": 268000}},
+  {"model": "catalog.track", "pk": 303, "fields": {"music_set": 3, "spotify_track_id": "polishhits000000000003", "artist": "Lady Pank",      "title": "Mniej niż zero",    "duration_ms": 240000}},
+  {"model": "catalog.track", "pk": 304, "fields": {"music_set": 3, "spotify_track_id": "polishhits000000000004", "artist": "Perfect",        "title": "Autobiografia",     "duration_ms": 320000}},
+  {"model": "catalog.track", "pk": 305, "fields": {"music_set": 3, "spotify_track_id": "polishhits000000000005", "artist": "Dżem",           "title": "Whisky",            "duration_ms": 410000}},
+  {"model": "catalog.track", "pk": 306, "fields": {"music_set": 3, "spotify_track_id": "polishhits000000000006", "artist": "Budka Suflera",  "title": "Takie tango",       "duration_ms": 280000}},
+  {"model": "catalog.track", "pk": 307, "fields": {"music_set": 3, "spotify_track_id": "polishhits000000000007", "artist": "Kayah",          "title": "Testosteron",       "duration_ms": 230000}},
+
+  {"model": "catalog.track", "pk": 401, "fields": {"music_set": 4, "spotify_track_id": "dancehits0000000000001", "artist": "Daft Punk",       "title": "One More Time",         "duration_ms": 320000}},
+  {"model": "catalog.track", "pk": 402, "fields": {"music_set": 4, "spotify_track_id": "dancehits0000000000002", "artist": "Calvin Harris",   "title": "Summer",                "duration_ms": 222000}},
+  {"model": "catalog.track", "pk": 403, "fields": {"music_set": 4, "spotify_track_id": "dancehits0000000000003", "artist": "David Guetta",    "title": "Titanium",              "duration_ms": 245000}},
+  {"model": "catalog.track", "pk": 404, "fields": {"music_set": 4, "spotify_track_id": "dancehits0000000000004", "artist": "Avicii",          "title": "Wake Me Up",            "duration_ms": 247000}},
+  {"model": "catalog.track", "pk": 405, "fields": {"music_set": 4, "spotify_track_id": "dancehits0000000000005", "artist": "Martin Garrix",   "title": "Animals",               "duration_ms": 304000}},
+  {"model": "catalog.track", "pk": 406, "fields": {"music_set": 4, "spotify_track_id": "dancehits0000000000006", "artist": "Swedish House Mafia", "title": "Don't You Worry Child", "duration_ms": 213000}},
+  {"model": "catalog.track", "pk": 407, "fields": {"music_set": 4, "spotify_track_id": "dancehits0000000000007", "artist": "Tiësto",          "title": "Red Lights",            "duration_ms": 233000}},
+
+  {"model": "catalog.track", "pk": 501, "fields": {"music_set": 5, "spotify_track_id": "indiemix00000000000001", "artist": "Arctic Monkeys",   "title": "Do I Wanna Know?",       "duration_ms": 272000}},
+  {"model": "catalog.track", "pk": 502, "fields": {"music_set": 5, "spotify_track_id": "indiemix00000000000002", "artist": "The Strokes",      "title": "Last Nite",              "duration_ms": 192000}},
+  {"model": "catalog.track", "pk": 503, "fields": {"music_set": 5, "spotify_track_id": "indiemix00000000000003", "artist": "Tame Impala",      "title": "The Less I Know the Better","duration_ms": 216000}},
+  {"model": "catalog.track", "pk": 504, "fields": {"music_set": 5, "spotify_track_id": "indiemix00000000000004", "artist": "Vampire Weekend",  "title": "A-Punk",                 "duration_ms": 137000}},
+  {"model": "catalog.track", "pk": 505, "fields": {"music_set": 5, "spotify_track_id": "indiemix00000000000005", "artist": "MGMT",             "title": "Kids",                   "duration_ms": 302000}},
+  {"model": "catalog.track", "pk": 506, "fields": {"music_set": 5, "spotify_track_id": "indiemix00000000000006", "artist": "Foster the People","title": "Pumped Up Kicks",        "duration_ms": 240000}},
+  {"model": "catalog.track", "pk": 507, "fields": {"music_set": 5, "spotify_track_id": "indiemix00000000000007", "artist": "Two Door Cinema Club","title": "Something Good Can Work","duration_ms": 197000}}
+]
