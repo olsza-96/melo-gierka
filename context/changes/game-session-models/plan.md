@@ -379,16 +379,16 @@ Each test patches `timezone.now()` via `freezegun` if available, OR (recommended
 
 #### Automated
 
-- [x] 2.1 `manage.py makemigrations game --check --dry-run` reports no pending changes
-- [x] 2.2 `manage.py migrate game` applies cleanly on fresh DB
-- [x] 2.3 `uv run pytest game/tests.py` passes all model + codegen tests
-- [x] 2.4 `manage.py check` exits 0
-- [x] 2.5 Smoke test still passes (`uv run pytest tests/test_smoke.py`)
+- [x] 2.1 `manage.py makemigrations game --check --dry-run` reports no pending changes — 109d8e2
+- [x] 2.2 `manage.py migrate game` applies cleanly on fresh DB — 109d8e2
+- [x] 2.3 `uv run pytest game/tests.py` passes all model + codegen tests — 109d8e2
+- [x] 2.4 `manage.py check` exits 0 — 109d8e2
+- [x] 2.5 Smoke test still passes (`uv run pytest tests/test_smoke.py`) — 109d8e2
 
 #### Manual
 
-- [x] 2.6 Shell smoke-walk: GameSession + Player + Round round-trip
-- [x] 2.7 Admin list views render for all three models
+- [x] 2.6 Shell smoke-walk: GameSession + Player + Round round-trip — 109d8e2
+- [x] 2.7 Admin list views render for all three models — 109d8e2
 
 ### Phase 3: Cleanup management command
 

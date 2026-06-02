@@ -117,21 +117,25 @@ def test_generate_session_code_retries_on_collision(music_set, monkeypatch):
         host_session_key="host",
     )
     values = iter([1, 2])
+    calls = 0
 
     def fake_randbelow(_n):
+        nonlocal calls
+        calls += 1
         return next(values)
 
     monkeypatch.setattr(codegen.secrets, "randbelow", fake_randbelow)
     assert codegen.generate_session_code() == "0002"
+    assert calls == 2
 
 
 @pytest.mark.django_db
-def test_generate_session_code_raises_when_exhausted(music_set, monkeypatch):
+def test_generate_session_code_raises_when_all_attempts_collide(music_set, monkeypatch):
     GameSession.objects.create(
         code="0001",
         music_set=music_set,
         host_session_key="host",
     )
     monkeypatch.setattr(codegen.secrets, "randbelow", lambda _n: 1)
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match=r"3 attempts"):
         codegen.generate_session_code(max_attempts=3)
