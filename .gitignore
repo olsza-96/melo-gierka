@@ -11,3 +11,5 @@ wheels/
 
 # Claude Code local config and skills
 .claude/
+
+.env

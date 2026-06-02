@@ -1,0 +1,27 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# local sqlite is rebuilt by the image's `migrate` step
+db.sqlite3
+
+# collectstatic output is generated in the image
+staticfiles/
+
+# project-management artifacts not needed at runtime
+context/
+.claude/
+*.md
+README*
+
+# OS / editor cruft
+.DS_Store
+.vscode/
+.idea/
