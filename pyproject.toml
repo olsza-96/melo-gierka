@@ -6,4 +6,22 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "django>=5.2.14",
+    "gunicorn>=26.0.0",
+    "whitenoise>=6.12.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-django>=4.8",
+    "pytest-cov>=5.0",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "melo_gierka.settings"
+python_files = ["test_*.py", "tests.py"]
+testpaths = ["tests", "catalog", "game"]
+addopts = "--strict-markers --tb=short"
+
+[tool.coverage.run]
+source = ["catalog", "game"]
