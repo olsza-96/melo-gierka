@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 import pytest
+from django.core.management import call_command
 from django.db import IntegrityError
 from django.utils import timezone
 
@@ -139,3 +140,50 @@ def test_generate_session_code_raises_when_all_attempts_collide(music_set, monke
     monkeypatch.setattr(codegen.secrets, "randbelow", lambda _n: 1)
     with pytest.raises(RuntimeError, match=r"3 attempts"):
         codegen.generate_session_code(max_attempts=3)
+
+
+@pytest.mark.django_db
+def test_cleanup_dry_run_deletes_nothing(music_set):
+    stale_at = timezone.now() - timedelta(hours=2)
+    GameSession.objects.create(
+        code="9001",
+        music_set=music_set,
+        host_session_key="host",
+        last_activity_at=stale_at,
+    )
+    call_command("cleanup_sessions", "--dry-run")
+    assert GameSession.objects.filter(code="9001").exists()
+
+
+@pytest.mark.django_db
+def test_cleanup_deletes_idle_sessions(music_set, track):
+    stale_at = timezone.now() - timedelta(hours=2)
+    gs = GameSession.objects.create(
+        code="9002",
+        music_set=music_set,
+        host_session_key="host",
+        last_activity_at=stale_at,
+    )
+    Player.objects.create(session=gs, name="Adam")
+    Round.objects.create(
+        session=gs,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        started_at=timezone.now(),
+    )
+    call_command("cleanup_sessions")
+    assert not GameSession.objects.filter(code="9002").exists()
+    assert not Player.objects.filter(session=gs).exists()
+    assert not Round.objects.filter(session=gs).exists()
+
+
+@pytest.mark.django_db
+def test_cleanup_preserves_fresh_sessions(music_set):
+    GameSession.objects.create(
+        code="9003",
+        music_set=music_set,
+        host_session_key="host",
+    )
+    call_command("cleanup_sessions")
+    assert GameSession.objects.filter(code="9003").exists()

@@ -394,12 +394,12 @@ Each test patches `timezone.now()` via `freezegun` if available, OR (recommended
 
 #### Automated
 
-- [ ] 3.1 `test_cleanup_dry_run_deletes_nothing` passes
-- [ ] 3.2 `test_cleanup_deletes_idle_sessions` passes
-- [ ] 3.3 `test_cleanup_preserves_fresh_sessions` passes
-- [ ] 3.4 `cleanup_sessions --help` shows both flags
+- [x] 3.1 `test_cleanup_dry_run_deletes_nothing` passes
+- [x] 3.2 `test_cleanup_deletes_idle_sessions` passes
+- [x] 3.3 `test_cleanup_preserves_fresh_sessions` passes
+- [x] 3.4 `cleanup_sessions --help` shows both flags
 
 #### Manual
 
-- [ ] 3.5 Two-session shell walk: dry-run preserves; real-run deletes only stale
-- [ ] 3.6 `context/changes/game-session-models/README.md` operational note reads accurately
+- [x] 3.5 Two-session shell walk: dry-run preserves; real-run deletes only stale
+- [x] 3.6 `context/changes/game-session-models/README.md` operational note reads accurately
