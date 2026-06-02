@@ -184,6 +184,7 @@ def test_cleanup_preserves_fresh_sessions(music_set):
         code="9003",
         music_set=music_set,
         host_session_key="host",
+        last_activity_at=timezone.now(),  # within idle window
     )
     call_command("cleanup_sessions")
     assert GameSession.objects.filter(code="9003").exists()

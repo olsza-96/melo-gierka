@@ -1,7 +1,7 @@
 import logging
 from datetime import timedelta
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from game.models import GameSession
@@ -26,6 +26,8 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, dry_run=False, idle_hours=1, **options):
+        if idle_hours <= 0:
+            raise CommandError("--idle-hours must be a positive integer")
         cutoff = timezone.now() - timedelta(hours=idle_hours)
         stale = GameSession.objects.filter(last_activity_at__lt=cutoff)
         codes = list(stale.values_list("code", flat=True))
