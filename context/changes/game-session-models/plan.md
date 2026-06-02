@@ -364,31 +364,31 @@ Each test patches `timezone.now()` via `freezegun` if available, OR (recommended
 
 #### Automated
 
-- [x] 1.1 `uv sync --dev` installs pytest, pytest-django, pytest-cov
-- [x] 1.2 `uv run pytest --collect-only` discovers `tests/test_smoke.py::test_music_set_round_trip`
-- [x] 1.3 `uv run pytest` exits 0 with 1 passing test
-- [x] 1.4 `uv run pytest --cov` reports coverage
-- [x] 1.5 `docker build .` exits 0; pytest not in production image
+- [x] 1.1 `uv sync --dev` installs pytest, pytest-django, pytest-cov — a90557d
+- [x] 1.2 `uv run pytest --collect-only` discovers `tests/test_smoke.py::test_music_set_round_trip` — a90557d
+- [x] 1.3 `uv run pytest` exits 0 with 1 passing test — a90557d
+- [x] 1.4 `uv run pytest --cov` reports coverage — a90557d
+- [x] 1.5 `docker build .` exits 0; pytest not in production image — a90557d
 
 #### Manual
 
-- [x] 1.6 `pyproject.toml` `[dependency-groups] dev` + `[tool.pytest.ini_options]` readable
-- [x] 1.7 CLAUDE.md test-convention line reads naturally
+- [x] 1.6 `pyproject.toml` `[dependency-groups] dev` + `[tool.pytest.ini_options]` readable — a90557d
+- [x] 1.7 CLAUDE.md test-convention line reads naturally — a90557d
 
 ### Phase 2: Game app + models + migrations + code generator
 
 #### Automated
 
-- [ ] 2.1 `manage.py makemigrations game --check --dry-run` reports no pending changes
-- [ ] 2.2 `manage.py migrate game` applies cleanly on fresh DB
-- [ ] 2.3 `uv run pytest game/tests.py` passes all model + codegen tests
-- [ ] 2.4 `manage.py check` exits 0
-- [ ] 2.5 Smoke test still passes (`uv run pytest tests/test_smoke.py`)
+- [x] 2.1 `manage.py makemigrations game --check --dry-run` reports no pending changes
+- [x] 2.2 `manage.py migrate game` applies cleanly on fresh DB
+- [x] 2.3 `uv run pytest game/tests.py` passes all model + codegen tests
+- [x] 2.4 `manage.py check` exits 0
+- [x] 2.5 Smoke test still passes (`uv run pytest tests/test_smoke.py`)
 
 #### Manual
 
-- [ ] 2.6 Shell smoke-walk: GameSession + Player + Round round-trip
-- [ ] 2.7 Admin list views render for all three models
+- [x] 2.6 Shell smoke-walk: GameSession + Player + Round round-trip
+- [x] 2.7 Admin list views render for all three models
 
 ### Phase 3: Cleanup management command
 
