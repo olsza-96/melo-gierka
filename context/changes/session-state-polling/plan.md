@@ -301,10 +301,10 @@ Document the F-04 contract for the next slices and lock in the manual verificati
 
 #### Automated
 
-- [x] 3.1 `DJANGO_DEBUG=True uv run pytest game/tests.py` remains green with the full suite
-- [x] 3.2 `DJANGO_DEBUG=True uv run python manage.py check` remains green after all F-04 files are present
+- [x] 3.1 `DJANGO_DEBUG=True uv run pytest game/tests.py` remains green with the full suite — 63af875
+- [x] 3.2 `DJANGO_DEBUG=True uv run python manage.py check` remains green after all F-04 files are present — 63af875
 
 #### Manual
 
-- [x] 3.3 A local two-tab or curl-plus-shell smoke test demonstrates lobby, changed-state, and finished-session behavior
-- [x] 3.4 `context/changes/session-state-polling/README.md` is sufficient for downstream slices to consume the endpoint contract
+- [x] 3.3 A local two-tab or curl-plus-shell smoke test demonstrates lobby, changed-state, and finished-session behavior — 63af875
+- [x] 3.4 `context/changes/session-state-polling/README.md` is sufficient for downstream slices to consume the endpoint contract — 63af875
