@@ -14,6 +14,30 @@ from django.core.exceptions import ImproperlyConfigured
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def _load_local_env(env_path: Path) -> None:
+    if not env_path.exists():
+        return
+
+    for raw_line in env_path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].strip()
+        if "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+
+        if key:
+            os.environ.setdefault(key, value)
+
+
+_load_local_env(BASE_DIR / ".env")
+
+
 # --- Core security --------------------------------------------------------
 
 DEV_SECRET_KEY_SENTINEL = "insecure-dev-key-do-not-use-in-prod"
@@ -21,6 +45,26 @@ DEV_SECRET_KEY_SENTINEL = "insecure-dev-key-do-not-use-in-prod"
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", DEV_SECRET_KEY_SENTINEL)
 
 DEBUG = os.environ.get("DJANGO_DEBUG", "False").lower() == "true"
+
+DEFAULT_SPOTIFY_REDIRECT_URI = (
+    "http://127.0.0.1:8000/oauth/spotify/callback"
+    if DEBUG
+    else "https://melo-gierka.fly.dev/oauth/spotify/callback"
+)
+
+SPOTIFY_CLIENT_ID = os.environ.get("SPOTIFY_CLIENT_ID", "").strip()
+SPOTIFY_REDIRECT_URI = os.environ.get(
+    "SPOTIFY_REDIRECT_URI",
+    DEFAULT_SPOTIFY_REDIRECT_URI,
+).strip()
+SPOTIFY_SCOPES = (
+    "streaming",
+    "user-read-email",
+    "user-read-private",
+    "user-modify-playback-state",
+    "user-read-playback-state",
+)
+SPOTIFY_SCOPE = " ".join(SPOTIFY_SCOPES)
 
 if not DEBUG and SECRET_KEY.startswith("insecure-"):
     raise ImproperlyConfigured(
