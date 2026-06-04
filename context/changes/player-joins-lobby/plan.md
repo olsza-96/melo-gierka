@@ -281,11 +281,11 @@ No schema migration is expected. `Player`, `GameSession`, and the session snapsh
 
 #### Automated
 
-- [x] 3.1 The targeted player-join regression suite passes: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "player_join or player_lobby or duplicate_name"`
-- [x] 3.2 Root smoke plus lobby/game tests pass together: `DJANGO_DEBUG=True uv run pytest catalog/tests.py tests/test_smoke.py game/tests.py`
+- [x] 3.1 The targeted player-join regression suite passes: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "player_join or player_lobby or duplicate_name"` — 503eefe
+- [x] 3.2 Root smoke plus lobby/game tests pass together: `DJANGO_DEBUG=True uv run pytest catalog/tests.py tests/test_smoke.py game/tests.py` — 503eefe
 
 #### Manual
 
-- [x] 3.3 A player can join a valid lobby with code and name and immediately appears in the host roster.
-- [x] 3.4 A duplicate exact name is rejected with a suggested variant, while a case-variant name remains allowed under the chosen exact-string rule.
-- [x] 3.5 The same browser can refresh the player lobby without creating another player row, while a fresh browser session must join again.
+- [x] 3.3 A player can join a valid lobby with code and name and immediately appears in the host roster. — 503eefe
+- [x] 3.4 A duplicate exact name is rejected with a suggested variant, while a case-variant name remains allowed under the chosen exact-string rule. — 503eefe
+- [x] 3.5 The same browser can refresh the player lobby without creating another player row, while a fresh browser session must join again. — 503eefe
