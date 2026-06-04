@@ -287,24 +287,24 @@ Document the F-04 contract for the next slices and lock in the manual verificati
 
 #### Automated
 
-- [x] 2.1 `DJANGO_DEBUG=True uv run pytest game/tests.py -k "state or etag"` passes the caching and freshness scenarios
-- [x] 2.2 `DJANGO_DEBUG=True uv run pytest game/tests.py` stays green with the full F-02 + F-04 suite
-- [x] 2.3 `DJANGO_DEBUG=True uv run python manage.py cleanup_sessions --dry-run` still runs cleanly after the endpoint code is added
+- [x] 2.1 `DJANGO_DEBUG=True uv run pytest game/tests.py -k "state or etag"` passes the caching and freshness scenarios — 9d08c6a
+- [x] 2.2 `DJANGO_DEBUG=True uv run pytest game/tests.py` stays green with the full F-02 + F-04 suite — 9d08c6a
+- [x] 2.3 `DJANGO_DEBUG=True uv run python manage.py cleanup_sessions --dry-run` still runs cleanly after the endpoint code is added — 9d08c6a
 
 #### Manual
 
-- [x] 2.4 Consecutive requests with `If-None-Match` yield `200` then `304` for unchanged state
-- [x] 2.5 A shell-driven state mutation produces a new `ETag` and a fresh `200`
-- [x] 2.6 Repeated valid polling keeps the session from appearing stale to cleanup
+- [x] 2.4 Consecutive requests with `If-None-Match` yield `200` then `304` for unchanged state — 9d08c6a
+- [x] 2.5 A shell-driven state mutation produces a new `ETag` and a fresh `200` — 9d08c6a
+- [x] 2.6 Repeated valid polling keeps the session from appearing stale to cleanup — 9d08c6a
 
 ### Phase 3: Contract handoff and downstream verification
 
 #### Automated
 
-- [ ] 3.1 `DJANGO_DEBUG=True uv run pytest game/tests.py` remains green with the full suite
-- [ ] 3.2 `DJANGO_DEBUG=True uv run python manage.py check` remains green after all F-04 files are present
+- [x] 3.1 `DJANGO_DEBUG=True uv run pytest game/tests.py` remains green with the full suite
+- [x] 3.2 `DJANGO_DEBUG=True uv run python manage.py check` remains green after all F-04 files are present
 
 #### Manual
 
-- [ ] 3.3 A local two-tab or curl-plus-shell smoke test demonstrates lobby, changed-state, and finished-session behavior
-- [ ] 3.4 `context/changes/session-state-polling/README.md` is sufficient for downstream slices to consume the endpoint contract
+- [x] 3.3 A local two-tab or curl-plus-shell smoke test demonstrates lobby, changed-state, and finished-session behavior
+- [x] 3.4 `context/changes/session-state-polling/README.md` is sufficient for downstream slices to consume the endpoint contract
