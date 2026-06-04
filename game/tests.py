@@ -1,8 +1,10 @@
-from datetime import timedelta
+from datetime import timedelta, timezone as dt_timezone
 
 import pytest
 from django.core.management import call_command
 from django.db import IntegrityError
+from django.urls import reverse
+from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 
 from catalog.models import MusicSet, Track
@@ -188,3 +190,93 @@ def test_cleanup_preserves_fresh_sessions(music_set):
     )
     call_command("cleanup_sessions")
     assert GameSession.objects.filter(code="9003").exists()
+
+
+@pytest.mark.django_db
+def test_session_state_returns_404_for_missing_session(client):
+    response = client.get(reverse("game:session-state", kwargs={"code": "9999"}))
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": {
+            "code": "session_not_found",
+            "message": "Session not found.",
+        }
+    }
+
+
+@pytest.mark.django_db
+def test_session_state_returns_lobby_snapshot(client, session):
+    adam = Player.objects.create(session=session, name="Adam", score=4)
+    beata = Player.objects.create(session=session, name="Beata", score=12)
+
+    response = client.get(reverse("game:session-state", kwargs={"code": session.code}))
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["code"] == "0001"
+    assert body["status"] == "lobby"
+    assert body["music_set"] == {
+        "slug": session.music_set.slug,
+        "name": session.music_set.name,
+    }
+    assert body["started_at"] is None
+    assert body["finished_at"] is None
+    assert body["current_round"] is None
+    assert [player["name"] for player in body["players"]] == ["Beata", "Adam"]
+    assert [player["score"] for player in body["players"]] == [12, 4]
+    assert _same_millisecond(body["players"][0]["joined_at"], beata.joined_at)
+    assert _same_millisecond(body["players"][1]["joined_at"], adam.joined_at)
+
+
+@pytest.mark.django_db
+def test_session_state_returns_current_round_snapshot(client, session, track):
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now()
+    session.save(update_fields=["status", "started_at"])
+    round_started_at = timezone.now()
+    Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        started_at=round_started_at,
+    )
+
+    response = client.get(reverse("game:session-state", kwargs={"code": session.code}))
+
+    assert response.status_code == 200
+    round_body = response.json()["current_round"]
+    assert round_body["index"] == 1
+    assert _same_millisecond(round_body["started_at"], round_started_at)
+    assert round_body["offset_ms"] == 30_000
+    assert round_body["track"] == {
+        "spotify_track_id": track.spotify_track_id,
+        "artist": track.artist,
+        "title": track.title,
+        "duration_ms": track.duration_ms,
+    }
+
+
+@pytest.mark.django_db
+def test_session_state_returns_finished_snapshot(client, session):
+    Player.objects.create(session=session, name="Adam", score=5)
+    Player.objects.create(session=session, name="Beata", score=15)
+    finished_at = timezone.now()
+    session.status = GameSession.Status.FINISHED
+    session.finished_at = finished_at
+    session.save(update_fields=["status", "finished_at"])
+
+    response = client.get(reverse("game:session-state", kwargs={"code": session.code}))
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["status"] == "finished"
+    assert _same_millisecond(body["finished_at"], finished_at)
+    assert [player["name"] for player in body["players"]] == ["Beata", "Adam"]
+
+
+def _same_millisecond(serialized_value, expected_datetime):
+    parsed_value = parse_datetime(serialized_value)
+    expected = expected_datetime.astimezone(dt_timezone.utc)
+    return abs((parsed_value - expected).total_seconds()) < 0.001
