@@ -11,8 +11,8 @@ from django.utils.http import parse_etags, url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_http_methods
 
 from game import codegen, spotify_auth
-from game.forms import HostSessionCreateForm
-from game.models import GameSession
+from game.forms import HostSessionCreateForm, PlayerJoinForm, build_player_name_suggestion
+from game.models import GameSession, Player
 from game.state import build_snapshot_etag, get_session_state
 
 
@@ -22,6 +22,7 @@ SPOTIFY_OAUTH_STATE_SESSION_KEY = "spotify_oauth_state"
 SPOTIFY_CODE_VERIFIER_SESSION_KEY = "spotify_code_verifier"
 SPOTIFY_POST_AUTH_REDIRECT_SESSION_KEY = "spotify_post_auth_redirect"
 SESSION_CREATE_RETRY_ATTEMPTS = 3
+PLAYER_SESSION_BINDING_SESSION_KEY = "joined_player"
 
 
 def _root_redirect() -> str:
@@ -77,6 +78,22 @@ def _get_owned_host_session(request, *, code: str) -> GameSession:
         GameSession.objects.select_related("music_set"),
         code=code,
         host_session_key=session_key,
+    )
+
+
+def _get_bound_player(request, *, code: str) -> Player | None:
+    binding = request.session.get(PLAYER_SESSION_BINDING_SESSION_KEY)
+    if not binding or binding.get("session_code") != code:
+        return None
+
+    player_id = binding.get("player_id")
+    if player_id is None:
+        return None
+
+    return (
+        Player.objects.select_related("session", "session__music_set")
+        .filter(pk=player_id, session__code=code)
+        .first()
     )
 
 
@@ -210,6 +227,75 @@ def music_set_edit(request, code):
     session.save(update_fields=["music_set"])
     messages.success(request, "Music set updated.")
     return redirect("game_host:host-lobby", code=session.code)
+
+
+@require_http_methods(["GET", "POST"])
+def player_join(request):
+    initial = {"code": request.GET.get("code", "")}
+    form = PlayerJoinForm(request.POST or None, initial=initial)
+
+    if request.method == "POST" and form.is_valid():
+        requested_session = form.cleaned_data["session"]
+        player_name = form.cleaned_data["name"]
+        _ensure_session_key(request)
+
+        try:
+            with transaction.atomic():
+                locked_session = GameSession.objects.select_for_update().get(
+                    pk=requested_session.pk
+                )
+                if locked_session.status != GameSession.Status.LOBBY:
+                    form.add_error(
+                        "code",
+                        "This session is no longer accepting players.",
+                    )
+                else:
+                    player = Player.objects.create(
+                        session=locked_session,
+                        name=player_name,
+                    )
+        except IntegrityError:
+            suggestion = build_player_name_suggestion(
+                session=requested_session,
+                base_name=player_name,
+            )
+            form.suggested_name = suggestion
+            form.add_error(
+                "name",
+                f'"{player_name}" is already taken in this session. Try "{suggestion}".',
+            )
+        else:
+            if not form.errors:
+                request.session[PLAYER_SESSION_BINDING_SESSION_KEY] = {
+                    "session_code": locked_session.code,
+                    "player_id": player.pk,
+                }
+                return redirect("game_host:player-lobby", code=locked_session.code)
+
+    return render(
+        request,
+        "game/player_join.html",
+        {
+            "join_form": form,
+        },
+    )
+
+
+@require_GET
+def player_lobby(request, code):
+    player = _get_bound_player(request, code=code)
+    if player is None:
+        messages.error(request, "Join a session before entering the player lobby.")
+        return redirect(f"{reverse('game_host:player-join')}?code={code}")
+
+    return render(
+        request,
+        "game/player_lobby.html",
+        {
+            "joined_player": player,
+            "player_session": player.session,
+        },
+    )
 
 
 @require_GET

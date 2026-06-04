@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}melo-gierka | join a game{% endblock %}
+
+{% block content %}
+  <main class="landing-grid">
+    <section class="panel hero-panel">
+      <p class="eyebrow">player join</p>
+      <h1>Join a live lobby.</h1>
+      <p class="panel-copy">
+        Enter the 4-digit session code from the host and choose a unique player name for this room.
+      </p>
+      <a class="text-link" href="{% url 'catalog:index' %}">Back to home</a>
+    </section>
+
+    <section class="panel host-panel">
+      <p class="eyebrow">join form</p>
+      <h2>Enter your details</h2>
+
+      <form class="host-form" method="post" action="{% url 'game_host:player-join' %}">
+        {% csrf_token %}
+        {{ join_form.non_field_errors }}
+
+        <label class="field-label" for="{{ join_form.code.id_for_label }}">
+          {{ join_form.code.label }}
+        </label>
+        {{ join_form.code }}
+        {{ join_form.code.errors }}
+
+        <label class="field-label" for="{{ join_form.name.id_for_label }}">
+          {{ join_form.name.label }}
+        </label>
+        {{ join_form.name }}
+        {{ join_form.name.errors }}
+        {% if join_form.name.help_text %}
+          <p class="field-help">{{ join_form.name.help_text }}</p>
+        {% endif %}
+
+        <button class="button button-primary" type="submit">Join lobby</button>
+      </form>
+    </section>
+  </main>
+{% endblock %}

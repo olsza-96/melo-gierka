@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}melo-gierka | player lobby {{ player_session.code }}{% endblock %}
+
+{% block content %}
+  <main class="lobby-grid">
+    <section class="panel lobby-hero">
+      <p class="eyebrow">player lobby</p>
+      <h1>You are in the lobby.</h1>
+      <p class="panel-copy">
+        The host has your spot reserved. Stay on this screen while the game room finishes filling up.
+      </p>
+
+      <div class="session-code-card" aria-label="Session code">
+        <span class="session-code-label">Session code</span>
+        <strong class="session-code-value">{{ player_session.code }}</strong>
+      </div>
+
+      <p class="lobby-status">Joined as {{ joined_player.name }}.</p>
+    </section>
+
+    <section class="panel lobby-panel">
+      <p class="eyebrow">what happens next</p>
+      <h2>Waiting for the host</h2>
+      <p class="panel-copy">
+        When the host starts the game, this page becomes the player round screen in the next slice.
+      </p>
+      <a class="text-link" href="{% url 'game_host:player-join' %}">Join a different lobby</a>
+    </section>
+  </main>
+{% endblock %}

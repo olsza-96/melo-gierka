@@ -486,6 +486,96 @@ def test_music_set_edit_rejects_non_lobby_session(client, session):
 
 
 @pytest.mark.django_db
+def test_player_join_creates_player_and_redirects_to_bound_lobby(client, session):
+    response = client.post(
+        reverse("game_host:player-join"),
+        {"code": session.code, "name": "Adam"},
+    )
+
+    player = Player.objects.get(session=session, name="Adam")
+    assert response.status_code == 302
+    assert response.headers["Location"] == reverse(
+        "game_host:player-lobby",
+        kwargs={"code": session.code},
+    )
+    assert client.session[game_views.PLAYER_SESSION_BINDING_SESSION_KEY] == {
+        "session_code": session.code,
+        "player_id": player.pk,
+    }
+
+
+@pytest.mark.django_db
+def test_player_join_renders_bound_player_lobby(client, session):
+    client.post(
+        reverse("game_host:player-join"),
+        {"code": session.code, "name": "Adam"},
+    )
+
+    response = client.get(reverse("game_host:player-lobby", kwargs={"code": session.code}))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "You are in the lobby." in content
+    assert session.code in content
+    assert "Adam" in content
+
+
+@pytest.mark.django_db
+def test_player_join_rejects_invalid_code_inline(client):
+    response = client.post(
+        reverse("game_host:player-join"),
+        {"code": "9999", "name": "Adam"},
+    )
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "Enter a valid session code." in content
+    assert Player.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_duplicate_name_rejects_player_join_with_suggestion(client, session):
+    Player.objects.create(session=session, name="Adam")
+
+    response = client.post(
+        reverse("game_host:player-join"),
+        {"code": session.code, "name": "Adam"},
+    )
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "That name is already taken in this session." in content
+    assert "Adam 2" in content
+    assert Player.objects.filter(session=session, name="Adam").count() == 1
+
+
+@pytest.mark.django_db
+def test_late_join_rejects_non_lobby_session(client, session):
+    session.status = GameSession.Status.PLAYING
+    session.save(update_fields=["status"])
+
+    response = client.post(
+        reverse("game_host:player-join"),
+        {"code": session.code, "name": "Adam"},
+    )
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "This session is no longer accepting players." in content
+    assert Player.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_player_join_redirects_unbound_browser_back_to_join(client, session):
+    response = client.get(reverse("game_host:player-lobby", kwargs={"code": session.code}))
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == (
+        f"{reverse('game_host:player-join')}?code={session.code}"
+    )
+
+
+@pytest.mark.django_db
 @override_settings(
     SPOTIFY_CLIENT_ID="client-id",
     SPOTIFY_REDIRECT_URI="http://127.0.0.1:8000/oauth/spotify/callback",
