@@ -431,6 +431,8 @@ def test_host_lobby_renders_for_owner(client, session):
     assert session.code in content
     assert session.music_set.name in content
     assert reverse("game_host:music-set-edit", kwargs={"code": session.code}) in content
+    assert reverse("game:session-state", kwargs={"code": session.code}) in content
+    assert "Live roster" in content
 
 
 @pytest.mark.django_db
@@ -518,6 +520,40 @@ def test_player_join_renders_bound_player_lobby(client, session):
     assert "You are in the lobby." in content
     assert session.code in content
     assert "Adam" in content
+    assert reverse("game:session-state", kwargs={"code": session.code}) in content
+    assert "Who is here" in content
+
+
+@pytest.mark.django_db
+def test_host_lobby_renders_player_roster_polling_hooks(client, session):
+    Player.objects.create(session=session, name="Adam")
+    session_data = client.session
+    session_data.save()
+    session.host_session_key = session_data.session_key
+    session.save(update_fields=["host_session_key"])
+
+    response = client.get(reverse("game_host:host-lobby", kwargs={"code": session.code}))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "data-lobby-state-root" in content
+    assert 'data-empty-label="No players yet."' in content
+    assert reverse("game:session-state", kwargs={"code": session.code}) in content
+
+
+@pytest.mark.django_db
+def test_player_lobby_renders_current_player_polling_hooks(client, session):
+    client.post(
+        reverse("game_host:player-join"),
+        {"code": session.code, "name": "Adam"},
+    )
+
+    response = client.get(reverse("game_host:player-lobby", kwargs={"code": session.code}))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "data-lobby-state-root" in content
+    assert 'data-current-player="Adam"' in content
 
 
 @pytest.mark.django_db

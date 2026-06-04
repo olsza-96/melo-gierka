@@ -17,6 +17,17 @@ def test_index_renders_signed_out_landing_page(client):
 	assert reverse("game_host:spotify-login") in content
 	assert "Join a game" in content
 	assert "melo-gierka is up" not in content
+	assert reverse("game_host:player-join") in content
+
+
+@pytest.mark.django_db
+def test_index_renders_player_join_cta(client):
+	response = client.get(reverse("catalog:index"))
+
+	content = response.content.decode()
+	assert response.status_code == 200
+	assert "Open player join" in content
+	assert reverse("game_host:player-join") in content
 
 
 @pytest.mark.django_db

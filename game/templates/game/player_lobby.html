@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}melo-gierka | player lobby {{ player_session.code }}{% endblock %}
 
@@ -25,7 +26,34 @@
       <p class="panel-copy">
         When the host starts the game, this page becomes the player round screen in the next slice.
       </p>
+
+      <section
+        class="roster-card"
+        data-lobby-state-root
+        data-state-url="{% url 'game:session-state' code=player_session.code %}"
+        data-empty-label="You are the first player in the room."
+        data-current-player="{{ joined_player.name }}"
+      >
+        <div class="roster-header">
+          <div>
+            <p class="eyebrow">joined players</p>
+            <h2>Who is here</h2>
+          </div>
+          <span class="roster-count" data-player-count>1 player</span>
+        </div>
+
+        <p class="panel-copy roster-copy" data-lobby-summary>
+          Waiting for the rest of the room to arrive.
+        </p>
+        <p class="roster-terminal" data-lobby-terminal hidden></p>
+        <ul class="player-roster" data-player-list>
+          <li class="player-roster-item player-roster-item-current">{{ joined_player.name }}</li>
+        </ul>
+      </section>
+
       <a class="text-link" href="{% url 'game_host:player-join' %}">Join a different lobby</a>
     </section>
   </main>
+
+  <script src="{% static 'game/lobby.js' %}" defer></script>
 {% endblock %}

@@ -255,27 +255,27 @@ No schema migration is expected. `Player`, `GameSession`, and the session snapsh
 
 #### Automated
 
-- [x] 1.1 Player-join request tests pass for happy path, invalid code, duplicate name, and non-lobby session rejection: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "player_join or duplicate_name or invalid_code or late_join"`
-- [x] 1.2 Django configuration still passes after the new form and routes land: `DJANGO_DEBUG=True uv run python manage.py check`
+- [x] 1.1 Player-join request tests pass for happy path, invalid code, duplicate name, and non-lobby session rejection: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "player_join or duplicate_name or invalid_code or late_join"` — 4249ed6
+- [x] 1.2 Django configuration still passes after the new form and routes land: `DJANGO_DEBUG=True uv run python manage.py check` — 4249ed6
 
 #### Manual
 
-- [x] 1.3 A signed-out visitor can leave `/` and reach the dedicated player join page.
-- [x] 1.4 Submitting an invalid code or duplicate exact name stays on the join form with an inline error.
-- [x] 1.5 A successful join redirects the same browser into a player-specific waiting lobby.
+- [x] 1.3 A signed-out visitor can leave `/` and reach the dedicated player join page. — 4249ed6
+- [x] 1.4 Submitting an invalid code or duplicate exact name stays on the join form with an inline error. — 4249ed6
+- [x] 1.5 A successful join redirects the same browser into a player-specific waiting lobby. — 4249ed6
 
 ### Phase 2: Lobby UX And Polling
 
 #### Automated
 
-- [ ] 2.1 Landing and lobby view tests pass for the player join CTA and session-bound player lobby access: `DJANGO_DEBUG=True uv run pytest catalog/tests.py game/tests.py -k "join_cta or player_lobby or host_lobby"`
-- [ ] 2.2 The existing session-state contract tests still pass while the new lobby surfaces consume it: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "session_state or etag"`
+- [x] 2.1 Landing and lobby view tests pass for the player join CTA and session-bound player lobby access: `DJANGO_DEBUG=True uv run pytest catalog/tests.py game/tests.py -k "join_cta or player_lobby or host_lobby"`
+- [x] 2.2 The existing session-state contract tests still pass while the new lobby surfaces consume it: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "session_state or etag"`
 
 #### Manual
 
-- [ ] 2.3 The landing page exposes a real player join CTA without regressing the host flow.
-- [ ] 2.4 When a player joins, the host lobby shows the player's name within the existing polling budget.
-- [ ] 2.5 Refreshing the player lobby in the same browser keeps the player in the same waiting lobby instead of creating another join.
+- [x] 2.3 The landing page exposes a real player join CTA without regressing the host flow.
+- [x] 2.4 When a player joins, the host lobby shows the player's name within the existing polling budget.
+- [x] 2.5 Refreshing the player lobby in the same browser keeps the player in the same waiting lobby instead of creating another join.
 
 ### Phase 3: Verification And Slice Handoff
 

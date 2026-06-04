@@ -60,11 +60,10 @@
       <p class="eyebrow">player path</p>
       <h2>Join a game</h2>
       <p class="panel-copy">
-        The player join flow lands in S-02. This section is only a placeholder so the app shell already has room for both roles.
+        Players can now move from the landing page straight into the join form with a session code and name.
       </p>
-      <div class="placeholder-box" aria-hidden="true">
-        <span>4-character code entry arrives in the next slice.</span>
-      </div>
+      <a class="button button-secondary" href="{% url 'game_host:player-join' %}">Open player join</a>
+      <p class="microcopy">Use the 4-digit code from the host screen to enter the shared lobby.</p>
     </section>
   </main>
 {% endblock %}

@@ -198,6 +198,25 @@ h2 {
   font: inherit;
 }
 
+.host-form input {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+}
+
+.errorlist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: #a23f36;
+  font-size: 0.92rem;
+}
+
 .placeholder-box {
   display: grid;
   place-items: center;
@@ -235,6 +254,73 @@ h2 {
   margin: 1rem 0 0;
   color: var(--accent);
   font-weight: 700;
+}
+
+.roster-card {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(104, 95, 84, 0.18);
+}
+
+.roster-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.roster-count {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(14, 90, 71, 0.08);
+  color: var(--accent);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.roster-copy {
+  margin-bottom: 0.9rem;
+}
+
+.player-roster {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.player-roster-item,
+.player-roster-empty {
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(104, 95, 84, 0.18);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.player-roster-item {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.player-roster-item-current {
+  border-color: rgba(14, 90, 71, 0.28);
+  background: rgba(14, 90, 71, 0.08);
+}
+
+.player-roster-empty,
+.roster-terminal {
+  color: var(--muted);
+}
+
+.roster-terminal {
+  margin: 0 0 0.9rem;
+  padding: 0.85rem 1rem;
+  border-radius: 1rem;
+  background: #fff1ef;
+  border: 1px solid #c77e7a;
 }
 
 @media (min-width: 900px) {

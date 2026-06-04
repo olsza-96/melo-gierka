@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}melo-gierka | host lobby {{ host_session.code }}{% endblock %}
 
@@ -8,7 +9,7 @@
       <p class="eyebrow">host lobby</p>
       <h1>Your room is live.</h1>
       <p class="panel-copy">
-        Share the code with players. Live player activity and round state arrive in the next slice, but this lobby code is already stable.
+        Share the code with players. This screen now keeps a live roster in sync while the room fills up.
       </p>
 
       <div class="session-code-card" aria-label="Session code">
@@ -39,6 +40,31 @@
         {% endif %}
         <button class="button button-secondary" type="submit">Update music set</button>
       </form>
+
+      <section
+        class="roster-card"
+        data-lobby-state-root
+        data-state-url="{% url 'game:session-state' code=host_session.code %}"
+        data-empty-label="No players yet."
+      >
+        <div class="roster-header">
+          <div>
+            <p class="eyebrow">joined players</p>
+            <h2>Live roster</h2>
+          </div>
+          <span class="roster-count" data-player-count>0 players</span>
+        </div>
+
+        <p class="panel-copy roster-copy" data-lobby-summary>
+          Waiting for the first player to join.
+        </p>
+        <p class="roster-terminal" data-lobby-terminal hidden></p>
+        <ul class="player-roster" data-player-list>
+          <li class="player-roster-empty">No players yet.</li>
+        </ul>
+      </section>
     </section>
   </main>
+
+  <script src="{% static 'game/lobby.js' %}" defer></script>
 {% endblock %}
