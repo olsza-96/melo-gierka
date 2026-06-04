@@ -273,29 +273,29 @@ Document the F-04 contract for the next slices and lock in the manual verificati
 
 #### Automated
 
-- [x] 1.1 `DJANGO_DEBUG=True uv run pytest game/tests.py -k state` passes the new route and snapshot tests
-- [x] 1.2 `DJANGO_DEBUG=True uv run python manage.py check` exits 0 after wiring the new URL module and view
-- [x] 1.3 Route verification stays covered by request tests because this repo has no `show_urls` command
+- [x] 1.1 `DJANGO_DEBUG=True uv run pytest game/tests.py -k state` passes the new route and snapshot tests — 19cb59f
+- [x] 1.2 `DJANGO_DEBUG=True uv run python manage.py check` exits 0 after wiring the new URL module and view — 19cb59f
+- [x] 1.3 Route verification stays covered by request tests because this repo has no `show_urls` command — 19cb59f
 
 #### Manual
 
-- [x] 1.4 Valid lobby session returns `200` JSON with session + players and no round object
-- [x] 1.5 Unknown code returns structured `404` JSON rather than HTML
-- [x] 1.6 Finished session still returns the final snapshot through the same endpoint
+- [x] 1.4 Valid lobby session returns `200` JSON with session + players and no round object — 19cb59f
+- [x] 1.5 Unknown code returns structured `404` JSON rather than HTML — 19cb59f
+- [x] 1.6 Finished session still returns the final snapshot through the same endpoint — 19cb59f
 
 ### Phase 2: Timing, freshness, and conditional caching
 
 #### Automated
 
-- [ ] 2.1 `DJANGO_DEBUG=True uv run pytest game/tests.py -k "state or etag"` passes the caching and freshness scenarios
-- [ ] 2.2 `DJANGO_DEBUG=True uv run pytest game/tests.py` stays green with the full F-02 + F-04 suite
-- [ ] 2.3 `DJANGO_DEBUG=True uv run python manage.py cleanup_sessions --dry-run` still runs cleanly after the endpoint code is added
+- [x] 2.1 `DJANGO_DEBUG=True uv run pytest game/tests.py -k "state or etag"` passes the caching and freshness scenarios
+- [x] 2.2 `DJANGO_DEBUG=True uv run pytest game/tests.py` stays green with the full F-02 + F-04 suite
+- [x] 2.3 `DJANGO_DEBUG=True uv run python manage.py cleanup_sessions --dry-run` still runs cleanly after the endpoint code is added
 
 #### Manual
 
-- [ ] 2.4 Consecutive requests with `If-None-Match` yield `200` then `304` for unchanged state
-- [ ] 2.5 A shell-driven state mutation produces a new `ETag` and a fresh `200`
-- [ ] 2.6 Repeated valid polling keeps the session from appearing stale to cleanup
+- [x] 2.4 Consecutive requests with `If-None-Match` yield `200` then `304` for unchanged state
+- [x] 2.5 A shell-driven state mutation produces a new `ETag` and a fresh `200`
+- [x] 2.6 Repeated valid polling keeps the session from appearing stale to cleanup
 
 ### Phase 3: Contract handoff and downstream verification
 

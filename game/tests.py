@@ -256,6 +256,7 @@ def test_session_state_returns_current_round_snapshot(client, session, track):
         "title": track.title,
         "duration_ms": track.duration_ms,
     }
+    assert parse_datetime(response.json()["server_now"]) is not None
 
 
 @pytest.mark.django_db
@@ -274,6 +275,78 @@ def test_session_state_returns_finished_snapshot(client, session):
     assert body["status"] == "finished"
     assert _same_millisecond(body["finished_at"], finished_at)
     assert [player["name"] for player in body["players"]] == ["Beata", "Adam"]
+
+
+@pytest.mark.django_db
+def test_session_state_returns_304_for_matching_etag(client, session):
+    first_response = client.get(
+        reverse("game:session-state", kwargs={"code": session.code})
+    )
+
+    response = client.get(
+        reverse("game:session-state", kwargs={"code": session.code}),
+        HTTP_IF_NONE_MATCH=first_response.headers["ETag"],
+    )
+
+    assert response.status_code == 304
+    assert response.content == b""
+    assert response.headers["ETag"] == first_response.headers["ETag"]
+    assert response.headers["Cache-Control"] == "private, max-age=0, must-revalidate"
+
+
+@pytest.mark.django_db
+def test_session_state_returns_new_etag_when_semantic_state_changes(client, session):
+    first_response = client.get(
+        reverse("game:session-state", kwargs={"code": session.code})
+    )
+    Player.objects.create(session=session, name="Adam", score=1)
+
+    response = client.get(
+        reverse("game:session-state", kwargs={"code": session.code}),
+        HTTP_IF_NONE_MATCH=first_response.headers["ETag"],
+    )
+
+    assert response.status_code == 200
+    assert response.headers["ETag"] != first_response.headers["ETag"]
+    assert response.json()["players"] == [
+        {
+            "name": "Adam",
+            "score": 1,
+            "joined_at": response.json()["players"][0]["joined_at"],
+        }
+    ]
+
+
+@pytest.mark.django_db
+def test_session_state_refreshes_last_activity_at_on_200(client, session):
+    stale_at = timezone.now() - timedelta(minutes=5)
+    session.last_activity_at = stale_at
+    session.save(update_fields=["last_activity_at"])
+
+    response = client.get(reverse("game:session-state", kwargs={"code": session.code}))
+
+    session.refresh_from_db()
+    assert response.status_code == 200
+    assert session.last_activity_at > stale_at
+
+
+@pytest.mark.django_db
+def test_session_state_refreshes_last_activity_at_on_304(client, session):
+    first_response = client.get(
+        reverse("game:session-state", kwargs={"code": session.code})
+    )
+    stale_at = timezone.now() - timedelta(minutes=5)
+    session.last_activity_at = stale_at
+    session.save(update_fields=["last_activity_at"])
+
+    response = client.get(
+        reverse("game:session-state", kwargs={"code": session.code}),
+        HTTP_IF_NONE_MATCH=first_response.headers["ETag"],
+    )
+
+    session.refresh_from_db()
+    assert response.status_code == 304
+    assert session.last_activity_at > stale_at
 
 
 def _same_millisecond(serialized_value, expected_datetime):
