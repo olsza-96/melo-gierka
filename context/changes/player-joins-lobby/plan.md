@@ -268,24 +268,24 @@ No schema migration is expected. `Player`, `GameSession`, and the session snapsh
 
 #### Automated
 
-- [x] 2.1 Landing and lobby view tests pass for the player join CTA and session-bound player lobby access: `DJANGO_DEBUG=True uv run pytest catalog/tests.py game/tests.py -k "join_cta or player_lobby or host_lobby"`
-- [x] 2.2 The existing session-state contract tests still pass while the new lobby surfaces consume it: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "session_state or etag"`
+- [x] 2.1 Landing and lobby view tests pass for the player join CTA and session-bound player lobby access: `DJANGO_DEBUG=True uv run pytest catalog/tests.py game/tests.py -k "join_cta or player_lobby or host_lobby"` — b3c38ff
+- [x] 2.2 The existing session-state contract tests still pass while the new lobby surfaces consume it: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "session_state or etag"` — b3c38ff
 
 #### Manual
 
-- [x] 2.3 The landing page exposes a real player join CTA without regressing the host flow.
-- [x] 2.4 When a player joins, the host lobby shows the player's name within the existing polling budget.
-- [x] 2.5 Refreshing the player lobby in the same browser keeps the player in the same waiting lobby instead of creating another join.
+- [x] 2.3 The landing page exposes a real player join CTA without regressing the host flow. — b3c38ff
+- [x] 2.4 When a player joins, the host lobby shows the player's name within the existing polling budget. — b3c38ff
+- [x] 2.5 Refreshing the player lobby in the same browser keeps the player in the same waiting lobby instead of creating another join. — b3c38ff
 
 ### Phase 3: Verification And Slice Handoff
 
 #### Automated
 
-- [ ] 3.1 The targeted player-join regression suite passes: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "player_join or player_lobby or duplicate_name"`
-- [ ] 3.2 Root smoke plus lobby/game tests pass together: `DJANGO_DEBUG=True uv run pytest catalog/tests.py tests/test_smoke.py game/tests.py`
+- [x] 3.1 The targeted player-join regression suite passes: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "player_join or player_lobby or duplicate_name"`
+- [x] 3.2 Root smoke plus lobby/game tests pass together: `DJANGO_DEBUG=True uv run pytest catalog/tests.py tests/test_smoke.py game/tests.py`
 
 #### Manual
 
-- [ ] 3.3 A player can join a valid lobby with code and name and immediately appears in the host roster.
-- [ ] 3.4 A duplicate exact name is rejected with a suggested variant, while a case-variant name remains allowed under the chosen exact-string rule.
-- [ ] 3.5 The same browser can refresh the player lobby without creating another player row, while a fresh browser session must join again.
+- [x] 3.3 A player can join a valid lobby with code and name and immediately appears in the host roster.
+- [x] 3.4 A duplicate exact name is rejected with a suggested variant, while a case-variant name remains allowed under the chosen exact-string rule.
+- [x] 3.5 The same browser can refresh the player lobby without creating another player row, while a fresh browser session must join again.

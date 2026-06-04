@@ -586,6 +586,24 @@ def test_duplicate_name_rejects_player_join_with_suggestion(client, session):
 
 
 @pytest.mark.django_db
+def test_case_variant_name_is_allowed_in_same_session(client, session):
+    Player.objects.create(session=session, name="Adam")
+
+    response = client.post(
+        reverse("game_host:player-join"),
+        {"code": session.code, "name": "ADAM"},
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == reverse(
+        "game_host:player-lobby",
+        kwargs={"code": session.code},
+    )
+    assert Player.objects.filter(session=session, name="Adam").count() == 1
+    assert Player.objects.filter(session=session, name="ADAM").count() == 1
+
+
+@pytest.mark.django_db
 def test_late_join_rejects_non_lobby_session(client, session):
     session.status = GameSession.Status.PLAYING
     session.save(update_fields=["status"])
@@ -599,6 +617,25 @@ def test_late_join_rejects_non_lobby_session(client, session):
     assert response.status_code == 200
     assert "This session is no longer accepting players." in content
     assert Player.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_player_lobby_refresh_keeps_same_player_without_creating_new_row(client, session):
+    join_response = client.post(
+        reverse("game_host:player-join"),
+        {"code": session.code, "name": "Adam"},
+    )
+
+    player_id = client.session[game_views.PLAYER_SESSION_BINDING_SESSION_KEY]["player_id"]
+
+    first_refresh = client.get(reverse("game_host:player-lobby", kwargs={"code": session.code}))
+    second_refresh = client.get(reverse("game_host:player-lobby", kwargs={"code": session.code}))
+
+    assert join_response.status_code == 302
+    assert first_refresh.status_code == 200
+    assert second_refresh.status_code == 200
+    assert Player.objects.filter(session=session, name="Adam").count() == 1
+    assert client.session[game_views.PLAYER_SESSION_BINDING_SESSION_KEY]["player_id"] == player_id
 
 
 @pytest.mark.django_db
