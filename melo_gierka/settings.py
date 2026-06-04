@@ -35,7 +35,10 @@ def _load_local_env(env_path: Path) -> None:
             os.environ.setdefault(key, value)
 
 
-_load_local_env(BASE_DIR / ".env")
+RAW_DEBUG = os.environ.get("DJANGO_DEBUG", "False").lower() == "true"
+
+if RAW_DEBUG:
+    _load_local_env(BASE_DIR / ".env")
 
 
 # --- Core security --------------------------------------------------------
@@ -121,7 +124,7 @@ ROOT_URLCONF = "melo_gierka.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "melo_gierka" / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}melo-gierka | party music setup{% endblock %}
+
+{% block content %}
+  <main class="landing-grid">
+    <section class="panel hero-panel">
+      <p class="eyebrow">party game setup</p>
+      <h1>Everyone plays on their own phone. The host runs the room.</h1>
+      <p class="lede">
+        Melo-gierka is moving from backend scaffolding into the first real host flow.
+        In this phase the host signs in with Spotify and chooses a music set; player join stays intentionally parked.
+      </p>
+
+      {% if not host_is_authenticated %}
+        <a class="button button-primary" href="{{ spotify_login_url }}">Log in with Spotify</a>
+        <p class="microcopy">Spotify Premium host account required for the later playback slice.</p>
+      {% else %}
+        <div class="host-status">
+          <p class="host-status-label">Signed in as</p>
+          <p class="host-status-name">{{ spotify_user.display_name|default:"Spotify host" }}</p>
+          <a class="text-link" href="{{ spotify_logout_url }}">Change Spotify account</a>
+        </div>
+      {% endif %}
+    </section>
+
+    <section class="panel host-panel">
+      {% if host_is_authenticated %}
+        <p class="eyebrow">host setup</p>
+        <h2>Create your session</h2>
+        <p class="panel-copy">
+          Choose one of the seeded sets and move straight into the first host lobby with a 4-digit code.
+        </p>
+
+        <form class="host-form" method="post" action="{% url 'game_host:session-create' %}">
+          {% csrf_token %}
+          {{ host_create_form.non_field_errors }}
+          <label class="field-label" for="{{ host_create_form.music_set.id_for_label }}">
+            {{ host_create_form.music_set.label }}
+          </label>
+          {{ host_create_form.music_set }}
+          {% if host_create_form.music_set.help_text %}
+            <p class="field-help">{{ host_create_form.music_set.help_text }}</p>
+          {% endif %}
+
+          <button class="button button-secondary" type="submit">Create session</button>
+        </form>
+
+        <p class="panel-footnote">{{ music_set_count }} seeded set{{ music_set_count|pluralize }} currently available.</p>
+      {% else %}
+        <p class="eyebrow">host setup</p>
+        <h2>Host setup unlocks after Spotify login</h2>
+        <p class="panel-copy">
+          Once signed in, this panel will show the five current placeholder music sets and the session-create form.
+        </p>
+      {% endif %}
+    </section>
+
+    <section class="panel player-panel">
+      <p class="eyebrow">player path</p>
+      <h2>Join a game</h2>
+      <p class="panel-copy">
+        The player join flow lands in S-02. This section is only a placeholder so the app shell already has room for both roles.
+      </p>
+      <div class="placeholder-box" aria-hidden="true">
+        <span>4-character code entry arrives in the next slice.</span>
+      </div>
+    </section>
+  </main>
+{% endblock %}

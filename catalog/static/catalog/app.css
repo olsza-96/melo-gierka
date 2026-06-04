@@ -1,0 +1,252 @@
+:root {
+  --bg: #f7f1e8;
+  --paper: #fffaf3;
+  --ink: #1d1c1a;
+  --muted: #685f54;
+  --line: #d8ccb8;
+  --accent: #0e5a47;
+  --accent-ink: #f6f3ed;
+  --accent-soft: #d7ebe5;
+  --shadow: 0 18px 45px rgba(34, 27, 19, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(14, 90, 71, 0.15), transparent 32%),
+    linear-gradient(180deg, #fcf7ef 0%, var(--bg) 100%);
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.page-shell {
+  width: min(1120px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 1.25rem 0 3rem;
+}
+
+.message-stack {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.message {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--paper);
+}
+
+.message-error {
+  border-color: #c77e7a;
+  background: #fff1ef;
+}
+
+.landing-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.lobby-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.panel {
+  padding: 1.4rem;
+  border: 1px solid rgba(104, 95, 84, 0.18);
+  border-radius: 1.5rem;
+  background: rgba(255, 250, 243, 0.92);
+  box-shadow: var(--shadow);
+}
+
+.hero-panel {
+  background: linear-gradient(135deg, rgba(14, 90, 71, 0.08), rgba(255, 250, 243, 0.96));
+}
+
+.lobby-hero {
+  background: linear-gradient(135deg, rgba(14, 90, 71, 0.12), rgba(255, 250, 243, 0.98));
+}
+
+.eyebrow {
+  margin: 0 0 0.75rem;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  margin: 0;
+  line-height: 1.1;
+}
+
+h1 {
+  max-width: 14ch;
+  font-size: clamp(2.2rem, 5vw, 4.4rem);
+}
+
+h2 {
+  font-size: clamp(1.5rem, 3vw, 2.1rem);
+}
+
+.lede,
+.panel-copy,
+.field-help,
+.panel-footnote,
+.microcopy,
+.placeholder-box,
+.host-status-label,
+.host-status-name,
+.text-link {
+  color: var(--muted);
+}
+
+.lede,
+.panel-copy {
+  max-width: 56ch;
+  margin: 1rem 0 0;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.button,
+.text-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1.2rem;
+  text-decoration: none;
+}
+
+.button {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.9rem 1.2rem;
+  font: inherit;
+  font-weight: 700;
+}
+
+.button-primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.button-secondary {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.button:disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
+.microcopy,
+.panel-footnote,
+.field-help,
+.host-status-label,
+.text-link {
+  font-size: 0.92rem;
+}
+
+.host-status {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 1rem;
+  background: rgba(14, 90, 71, 0.08);
+}
+
+.host-status-label,
+.host-status-name {
+  margin: 0;
+}
+
+.host-status-name {
+  color: var(--ink);
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.host-form {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.field-label {
+  font-weight: 700;
+}
+
+.host-form select {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+}
+
+.placeholder-box {
+  display: grid;
+  place-items: center;
+  min-height: 8rem;
+  margin-top: 1rem;
+  border: 1px dashed var(--line);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.52);
+  text-align: center;
+  line-height: 1.5;
+}
+
+.session-code-card {
+  display: inline-grid;
+  gap: 0.35rem;
+  margin-top: 1.25rem;
+  padding: 1rem 1.1rem;
+  border-radius: 1rem;
+  background: rgba(14, 90, 71, 0.1);
+}
+
+.session-code-label {
+  color: var(--muted);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.session-code-value {
+  font-size: clamp(2.4rem, 8vw, 4.2rem);
+  letter-spacing: 0.18em;
+}
+
+.lobby-status {
+  margin: 1rem 0 0;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+@media (min-width: 900px) {
+  .landing-grid {
+    grid-template-columns: 1.25fr 1fr;
+  }
+
+  .lobby-grid {
+    grid-template-columns: 1.2fr 0.95fr;
+  }
+
+  .hero-panel {
+    grid-row: span 2;
+  }
+}

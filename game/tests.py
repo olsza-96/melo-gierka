@@ -203,6 +203,7 @@ def test_build_authorize_url_includes_pkce_parameters():
     authorize_url = spotify_auth.build_authorize_url(
         state="state-123",
         code_verifier="a" * 64,
+        redirect_uri="https://example.com/oauth/spotify/callback",
     )
 
     parsed_url = urlparse(authorize_url)
@@ -212,7 +213,7 @@ def test_build_authorize_url_includes_pkce_parameters():
     assert parsed_url.netloc == "accounts.spotify.com"
     assert parsed_url.path == "/authorize"
     assert params["client_id"] == ["client-id"]
-    assert params["redirect_uri"] == ["http://127.0.0.1:8000/oauth/spotify/callback"]
+    assert params["redirect_uri"] == ["https://example.com/oauth/spotify/callback"]
     assert params["scope"] == ["streaming user-read-email"]
     assert params["state"] == ["state-123"]
     assert params["code_challenge_method"] == ["S256"]
@@ -251,6 +252,7 @@ def test_spotify_login_redirects_to_authorize_url_and_stores_pkce_state(client):
     session_data = client.session
     assert response.status_code == 302
     assert response.headers["Location"].startswith("https://accounts.spotify.com/authorize?")
+    assert "redirect_uri=http%3A%2F%2Ftestserver%2Foauth%2Fspotify%2Fcallback" in response.headers["Location"]
     assert session_data[game_views.SPOTIFY_POST_AUTH_REDIRECT_SESSION_KEY] == "/host/create"
     assert session_data[game_views.SPOTIFY_OAUTH_STATE_SESSION_KEY]
     assert session_data[game_views.SPOTIFY_CODE_VERIFIER_SESSION_KEY]
@@ -262,10 +264,19 @@ def test_spotify_login_redirects_to_authorize_url_and_stores_pkce_state(client):
     SPOTIFY_REDIRECT_URI="http://127.0.0.1:8000/oauth/spotify/callback",
 )
 def test_spotify_callback_stores_auth_payload_and_profile(client, monkeypatch):
+    captured = {}
+
     monkeypatch.setattr(
         spotify_auth,
         "exchange_code_for_token",
-        lambda *, code, code_verifier: {
+        lambda *, code, code_verifier, redirect_uri: captured.update(
+            {
+                "code": code,
+                "code_verifier": code_verifier,
+                "redirect_uri": redirect_uri,
+            }
+        )
+        or {
             "access_token": "access-token",
             "refresh_token": "refresh-token",
             "scope": "streaming user-read-email",
@@ -295,6 +306,8 @@ def test_spotify_callback_stores_auth_payload_and_profile(client, monkeypatch):
     session_data = client.session
     assert response.status_code == 302
     assert response.headers["Location"] == "/host/create"
+    assert captured["code"] == "oauth-code"
+    assert captured["redirect_uri"] == "http://testserver/oauth/spotify/callback"
     assert session_data[game_views.SPOTIFY_AUTH_SESSION_KEY]["access_token"] == "access-token"
     assert session_data[game_views.SPOTIFY_USER_SESSION_KEY]["display_name"] == "Host User"
     assert game_views.SPOTIFY_OAUTH_STATE_SESSION_KEY not in session_data
@@ -318,6 +331,157 @@ def test_spotify_callback_handles_provider_error(client):
     assert response.status_code == 302
     assert response.headers["Location"] == reverse("catalog:index")
     assert game_views.SPOTIFY_OAUTH_STATE_SESSION_KEY not in session_data
+
+
+@pytest.mark.django_db
+@override_settings(
+    SPOTIFY_CLIENT_ID="client-id",
+    SPOTIFY_REDIRECT_URI="http://127.0.0.1:8000/oauth/spotify/callback",
+)
+def test_spotify_callback_rejects_missing_code(client):
+    client.get(reverse("game_host:spotify-login"))
+    oauth_state = client.session[game_views.SPOTIFY_OAUTH_STATE_SESSION_KEY]
+
+    response = client.get(
+        reverse("game_host:spotify-callback"),
+        {"state": oauth_state},
+    )
+
+    session_data = client.session
+    assert response.status_code == 302
+    assert response.headers["Location"] == reverse("catalog:index")
+    assert game_views.SPOTIFY_AUTH_SESSION_KEY not in session_data
+    assert game_views.SPOTIFY_OAUTH_STATE_SESSION_KEY not in session_data
+
+
+def _set_host_auth(client, *, display_name="Host User"):
+    session_data = client.session
+    session_data[game_views.SPOTIFY_AUTH_SESSION_KEY] = {"access_token": "access-token"}
+    session_data[game_views.SPOTIFY_USER_SESSION_KEY] = {"display_name": display_name}
+    session_data.save()
+
+
+@pytest.mark.django_db
+def test_session_create_redirects_to_owned_host_lobby(client, music_set):
+    _set_host_auth(client)
+
+    response = client.post(
+        reverse("game_host:session-create"),
+        {"music_set": str(music_set.pk)},
+    )
+
+    created_session = GameSession.objects.get()
+    assert response.status_code == 302
+    assert response.headers["Location"] == reverse(
+        "game_host:host-lobby",
+        kwargs={"code": created_session.code},
+    )
+    assert created_session.host_session_key == client.session.session_key
+    assert created_session.music_set == music_set
+
+
+@pytest.mark.django_db
+def test_session_create_rejects_unauthenticated_host(client, music_set):
+    response = client.post(
+        reverse("game_host:session-create"),
+        {"music_set": str(music_set.pk)},
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == reverse("catalog:index")
+    assert GameSession.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_session_create_retries_after_integrity_error(client, music_set, monkeypatch):
+    _set_host_auth(client)
+    GameSession.objects.create(
+        code="1111",
+        music_set=music_set,
+        host_session_key="other-session",
+    )
+
+    codes = iter(["1111", "2222"])
+    monkeypatch.setattr(codegen, "generate_session_code", lambda: next(codes))
+
+    response = client.post(
+        reverse("game_host:session-create"),
+        {"music_set": str(music_set.pk)},
+    )
+
+    created_session = GameSession.objects.get(code="2222")
+    assert response.status_code == 302
+    assert response.headers["Location"] == reverse(
+        "game_host:host-lobby",
+        kwargs={"code": created_session.code},
+    )
+
+
+@pytest.mark.django_db
+def test_host_lobby_renders_for_owner(client, session):
+    session_data = client.session
+    session_data.save()
+    session.host_session_key = session_data.session_key
+    session.save(update_fields=["host_session_key"])
+
+    response = client.get(reverse("game_host:host-lobby", kwargs={"code": session.code}))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert session.code in content
+    assert session.music_set.name in content
+    assert reverse("game_host:music-set-edit", kwargs={"code": session.code}) in content
+
+
+@pytest.mark.django_db
+def test_host_owner_guard_blocks_other_browser(client, session):
+    other_client = client.__class__()
+    response = other_client.get(reverse("game_host:host-lobby", kwargs={"code": session.code}))
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_music_set_edit_updates_lobby_without_changing_code(client, session):
+    other_music_set = MusicSet.objects.create(slug="set-b", name="Set B")
+    session_data = client.session
+    session_data.save()
+    session.host_session_key = session_data.session_key
+    session.save(update_fields=["host_session_key"])
+
+    response = client.post(
+        reverse("game_host:music-set-edit", kwargs={"code": session.code}),
+        {"music_set": str(other_music_set.pk)},
+    )
+
+    session.refresh_from_db()
+    assert response.status_code == 302
+    assert response.headers["Location"] == reverse(
+        "game_host:host-lobby",
+        kwargs={"code": session.code},
+    )
+    assert session.code == "0001"
+    assert session.music_set == other_music_set
+
+
+@pytest.mark.django_db
+def test_music_set_edit_rejects_non_lobby_session(client, session):
+    other_music_set = MusicSet.objects.create(slug="set-b", name="Set B")
+    session.status = GameSession.Status.PLAYING
+    session.save(update_fields=["status"])
+    session_data = client.session
+    session_data.save()
+    session.host_session_key = session_data.session_key
+    session.save(update_fields=["host_session_key"])
+
+    response = client.post(
+        reverse("game_host:music-set-edit", kwargs={"code": session.code}),
+        {"music_set": str(other_music_set.pk)},
+    )
+
+    session.refresh_from_db()
+    assert response.status_code == 404
+    assert session.music_set != other_music_set
     assert game_views.SPOTIFY_AUTH_SESSION_KEY not in session_data
 
 

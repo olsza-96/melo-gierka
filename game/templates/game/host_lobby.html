@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}melo-gierka | host lobby {{ host_session.code }}{% endblock %}
+
+{% block content %}
+  <main class="lobby-grid">
+    <section class="panel lobby-hero">
+      <p class="eyebrow">host lobby</p>
+      <h1>Your room is live.</h1>
+      <p class="panel-copy">
+        Share the code with players. Live player activity and round state arrive in the next slice, but this lobby code is already stable.
+      </p>
+
+      <div class="session-code-card" aria-label="Session code">
+        <span class="session-code-label">Session code</span>
+        <strong class="session-code-value">{{ host_session.code }}</strong>
+      </div>
+
+      <p class="lobby-status">Waiting for players to join.</p>
+      <a class="text-link" href="{{ spotify_logout_url }}">Change Spotify account</a>
+    </section>
+
+    <section class="panel lobby-panel">
+      <p class="eyebrow">selected music set</p>
+      <h2>{{ host_session.music_set.name }}</h2>
+      <p class="panel-copy">
+        You can still swap the set while the session stays in lobby. The code and ownership stay attached to this same room.
+      </p>
+
+      <form class="host-form" method="post" action="{% url 'game_host:music-set-edit' code=host_session.code %}">
+        {% csrf_token %}
+        {{ music_set_form.non_field_errors }}
+        <label class="field-label" for="{{ music_set_form.music_set.id_for_label }}">
+          {{ music_set_form.music_set.label }}
+        </label>
+        {{ music_set_form.music_set }}
+        {% if music_set_form.music_set.help_text %}
+          <p class="field-help">{{ music_set_form.music_set.help_text }}</p>
+        {% endif %}
+        <button class="button button-secondary" type="submit">Update music set</button>
+      </form>
+    </section>
+  </main>
+{% endblock %}

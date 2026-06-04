@@ -1,0 +1,23 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}melo-gierka{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'catalog/app.css' %}">
+  </head>
+  <body>
+    <div class="page-shell">
+      {% if messages %}
+        <div class="message-stack" role="status" aria-live="polite">
+          {% for message in messages %}
+            <p class="message message-{{ message.tags|default:'info' }}">{{ message }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% block content %}{% endblock %}
+    </div>
+  </body>
+</html>

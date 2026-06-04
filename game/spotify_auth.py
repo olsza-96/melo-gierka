@@ -34,11 +34,11 @@ def build_code_challenge(code_verifier: str) -> str:
     return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
 
 
-def build_authorize_url(*, state: str, code_verifier: str) -> str:
+def build_authorize_url(*, state: str, code_verifier: str, redirect_uri: str) -> str:
     params = {
         "client_id": settings.SPOTIFY_CLIENT_ID,
         "response_type": "code",
-        "redirect_uri": settings.SPOTIFY_REDIRECT_URI,
+        "redirect_uri": redirect_uri,
         "scope": settings.SPOTIFY_SCOPE,
         "state": state,
         "code_challenge_method": "S256",
@@ -62,7 +62,7 @@ def normalize_token_payload(token_payload: dict) -> dict:
     }
 
 
-def exchange_code_for_token(*, code: str, code_verifier: str) -> dict:
+def exchange_code_for_token(*, code: str, code_verifier: str, redirect_uri: str) -> dict:
     try:
         response = httpx.post(
             SPOTIFY_TOKEN_URL,
@@ -70,7 +70,7 @@ def exchange_code_for_token(*, code: str, code_verifier: str) -> dict:
                 "client_id": settings.SPOTIFY_CLIENT_ID,
                 "grant_type": "authorization_code",
                 "code": code,
-                "redirect_uri": settings.SPOTIFY_REDIRECT_URI,
+                "redirect_uri": redirect_uri,
                 "code_verifier": code_verifier,
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"},

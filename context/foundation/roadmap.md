@@ -33,7 +33,7 @@ melo-gierka to indywidualna gra muzyczna na imprezie: każdy znajomy gra na swoi
 | F-02  | game-session-models          | (foundation) modele GameSession/Player/Round + cleanup TTL                    | —                  | NFR §Sesja ulotna, FR-002, FR-005   | implemented |
 | F-03  | mobile-template-skeleton     | (foundation) base templates + Whitenoise + mobile-first layout                | —                  | NFR §Mobile browsers                | ready    |
 | F-04  | session-state-polling        | (foundation) endpoint `/api/sessions/<code>/state` zwraca stan sesji do pollingu | F-02               | NFR §Lag ≤1s, FR-006                | implemented |
-| S-01  | host-creates-session         | gospodarz tworzy sesję (login Spotify → wybór zestawu → 4-znakowy kod)       | F-01, F-02, F-03   | FR-001, FR-002, FR-003, US-01       | proposed |
+| S-01  | host-creates-session         | gospodarz tworzy sesję (login Spotify → wybór zestawu → 4-znakowy kod)       | F-01, F-02, F-03   | FR-001, FR-002, FR-003, US-01       | implemented |
 | S-02  | player-joins-lobby           | gracz dołącza kodem + imieniem; gospodarz widzi listę graczy przez polling   | S-01, F-04         | FR-004, FR-005, FR-006, US-01       | proposed |
 | S-03  | first-playable-round         | host odtwarza 30s fragment, gracz wybiera spośród 4 opcji, dostaje punkty    | S-02               | FR-007, FR-008, FR-009, FR-010, FR-011, US-01 | proposed |
 | S-04  | full-ten-round-session       | pełna sesja 10 rund z ekranem wyników końcowych (NORTH STAR)                  | S-03               | FR-013, US-01, NFR §Lag ≤1s         | proposed |
@@ -132,7 +132,7 @@ Co jest już na miejscu w kodzie według stanu na 2026-06-01 (auto-zbadane + pot
   - PRD §Open Question #4: zawartość 5 zestawów (które playlisty Spotify? hardcoded URI). Owner: user. Block: no (slice może shipnąć z placeholderami; finalne playlisty kuratorowane po pierwszej sesji testowej).
   - Czy 4-char kod sesji powinien wykluczać mylące znaki (`I`, `1`, `O`, `0`)? Owner: agent. Block: no.
 - **Risk:** Pierwszy slice po F-01 — jakiekolwiek błędy w OAuth scope `streaming` lub callback URL surface'ują się tutaj. Sekwencja zaplanowana zaraz po F-01 żeby skrócić feedback loop.
-- **Status:** proposed
+- **Status:** implemented
 
 ### S-02: Gracz dołącza do lobby
 
@@ -207,7 +207,7 @@ Co jest już na miejscu w kodzie według stanu na 2026-06-01 (auto-zbadane + pot
 | F-02       | game-session-models          | Game session / player / round models + cleanup TTL                 | no                    | Implemented and impl-reviewed on 2026-06-04                  |
 | F-03       | mobile-template-skeleton     | Mobile-first base templates + Whitenoise                           | yes                   | Run `/10x-plan mobile-template-skeleton`                     |
 | F-04       | session-state-polling        | Session state JSON polling endpoint                                | yes                   | F-02 is implemented; this is the next unblocked foundation to plan |
-| S-01       | host-creates-session         | Gospodarz tworzy sesję (login Spotify + wybór zestawu + kod)       | no                    | Wait for F-01 unblock + F-02 + F-03                          |
+| S-01       | host-creates-session         | Gospodarz tworzy sesję (login Spotify + wybór zestawu + kod)       | no                    | Implemented and impl-reviewed on 2026-06-04                  |
 | S-02       | player-joins-lobby           | Gracz dołącza do lobby + host widzi listę graczy                   | no                    | Wait for S-01 + F-04                                         |
 | S-03       | first-playable-round         | Pierwsza grywalna runda end-to-end (Spotify SDK + scoring)         | no                    | Wait for S-02; spike na Web Playback SDK w trakcie `/10x-plan` |
 | S-04       | full-ten-round-session       | Pełna 10-rundowa sesja + ekran wyników (NORTH STAR)                | no                    | Wait for S-03                                                |

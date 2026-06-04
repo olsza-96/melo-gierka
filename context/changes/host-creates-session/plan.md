@@ -343,50 +343,50 @@ No database schema migration is expected for this slice because the existing `Ga
 
 #### Automated
 
-- [x] 1.1 Auth helper and callback tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "spotify or oauth or callback"`
-- [x] 1.2 Framework configuration still passes checks: `DJANGO_DEBUG=True uv run python manage.py check`
+- [x] 1.1 Auth helper and callback tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "spotify or oauth or callback"` — 432a4e7
+- [x] 1.2 Framework configuration still passes checks: `DJANGO_DEBUG=True uv run python manage.py check` — 432a4e7
 
 #### Manual
 
-- [x] 1.3 Visiting the host login route redirects to Spotify with the selected scopes and exact configured callback URL.
-- [x] 1.4 Completing the callback returns to the app with a persistent host-auth session in the same browser.
-- [x] 1.5 Using the change-account action clears host auth state and allows a fresh login.
+- [x] 1.3 Visiting the host login route redirects to Spotify with the selected scopes and exact configured callback URL. — 432a4e7
+- [x] 1.4 Completing the callback returns to the app with a persistent host-auth session in the same browser. — 432a4e7
+- [x] 1.5 Using the change-account action clears host auth state and allows a fresh login. — 432a4e7
 
 ### Phase 2: Landing Page And Host Creation Form
 
 #### Automated
 
-- [ ] 2.1 Landing-page tests pass for signed-out and signed-in host states: `DJANGO_DEBUG=True uv run pytest catalog/tests.py game/tests.py -k "index or landing or host_create_form"`
-- [ ] 2.2 Static/template build sanity passes: `DJANGO_DEBUG=True uv run python manage.py collectstatic --noinput`
+- [x] 2.1 Landing-page tests pass for signed-out and signed-in host states: `DJANGO_DEBUG=True uv run pytest catalog/tests.py game/tests.py -k "index or landing or host_create_form"`
+- [x] 2.2 Static/template build sanity passes: `DJANGO_DEBUG=True uv run python manage.py collectstatic --noinput`
 
 #### Manual
 
-- [ ] 2.3 A signed-out visitor at `/` sees a host login CTA rather than plain text.
-- [ ] 2.4 A signed-in host at `/` sees the five placeholder music sets from the seeded fixture as selectable options.
-- [ ] 2.5 The page renders cleanly in a desktop browser without exposing a working player-join flow yet.
+- [x] 2.3 A signed-out visitor at `/` sees a host login CTA rather than plain text.
+- [x] 2.4 A signed-in host at `/` sees the five placeholder music sets from the seeded fixture as selectable options.
+- [x] 2.5 The page renders cleanly in a desktop browser without exposing a working player-join flow yet.
 
 ### Phase 3: Session Creation And Editable Host Lobby
 
 #### Automated
 
-- [ ] 3.1 Session-create and host-lobby tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "session_create or host_lobby or host_owner or music_set_edit"`
-- [ ] 3.2 Django system checks still pass after route/template additions: `DJANGO_DEBUG=True uv run python manage.py check`
+- [x] 3.1 Session-create and host-lobby tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "session_create or host_lobby or host_owner or music_set_edit"`
+- [x] 3.2 Django system checks still pass after route/template additions: `DJANGO_DEBUG=True uv run python manage.py check`
 
 #### Manual
 
-- [ ] 3.3 An authenticated host can create a session from `/` and is redirected to a lobby showing the generated 4-digit code.
-- [ ] 3.4 Editing the chosen set from the lobby updates the displayed set in place without changing the code.
-- [ ] 3.5 Opening the same lobby URL from a different browser session does not grant host access.
+- [x] 3.3 An authenticated host can create a session from `/` and is redirected to a lobby showing the generated 4-digit code.
+- [x] 3.4 Editing the chosen set from the lobby updates the displayed set in place without changing the code.
+- [x] 3.5 Opening the same lobby URL from a different browser session does not grant host access.
 
 ### Phase 4: Verification Coverage And Fly Smoke Readiness
 
 #### Automated
 
-- [ ] 4.1 The targeted host-flow regression suite passes: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "oauth or host_lobby or music_set_edit"`
-- [ ] 4.2 Root smoke plus targeted game tests pass together: `DJANGO_DEBUG=True uv run pytest tests/test_smoke.py game/tests.py`
+- [x] 4.1 The targeted host-flow regression suite passes: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "oauth or host_lobby or music_set_edit"`
+- [x] 4.2 Root smoke plus targeted game tests pass together: `DJANGO_DEBUG=True uv run pytest tests/test_smoke.py game/tests.py`
 
 #### Manual
 
-- [ ] 4.3 The local S-01 flow succeeds end-to-end: `/` → Spotify login → set selection → lobby code display.
-- [ ] 4.4 The deployed Fly app succeeds once through the same OAuth callback path with HTTPS and the allowlisted production redirect URI.
-- [ ] 4.5 The implementer has a written smoke checklist for repeating the verification after regressions.
+- [x] 4.3 The local S-01 flow succeeds end-to-end: `/` → Spotify login → set selection → lobby code display.
+- [x] 4.4 The deployed Fly app succeeds once through the same OAuth callback path with HTTPS and the allowlisted production redirect URI.
+- [x] 4.5 The implementer has a written smoke checklist for repeating the verification after regressions.
