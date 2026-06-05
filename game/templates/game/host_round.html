@@ -27,6 +27,8 @@
       data-blocked-reason="{{ spotify_blocked_reason }}"
       data-ready-url="{{ spotify_playback_ready_url }}"
       data-auto-connect="true"
+      data-round-state-root
+      data-state-url="{% url 'game:session-state' code=host_session.code %}"
     >
       <div hidden>{% csrf_token %}</div>
       <p class="eyebrow">playback status</p>
@@ -34,15 +36,24 @@
       <p class="panel-copy">
         This browser remains the active Spotify device for the current round. If it reconnects, the ready state is written back to the same host session.
       </p>
+      <p class="panel-copy" data-round-status>Round {{ current_round.index }} is live.</p>
+      <p class="playback-status" data-round-countdown>Connecting to Spotify browser playback…</p>
       <p class="playback-status" data-playback-status>Connecting to Spotify browser playback…</p>
 
       <div class="playback-metadata">
         <p><strong>Track id:</strong> {{ current_round.track.spotify_track_id }}</p>
         <p><strong>Offset:</strong> {{ current_round.offset_ms }} ms</p>
-        <p><strong>Answer options:</strong> {{ current_round.answer_options|join:", " }}</p>
+        <p><strong>Answer options:</strong></p>
+        <div data-answer-options>
+          {% for option in current_round.answer_options %}
+            <span>{{ option }}</span>{% if not forloop.last %}, {% endif %}
+          {% endfor %}
+        </div>
+        <p class="panel-copy" data-viewer-answer hidden></p>
       </div>
     </section>
   </main>
 
-  <script src="{% static 'game/spotify_player.js' %}" defer></script>
+  <script src="{% static 'game/spotify_player.js' %}?v=20260605b" defer></script>
+  <script src="{% static 'game/round.js' %}?v=20260605b" defer></script>
 {% endblock %}

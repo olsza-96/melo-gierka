@@ -7,7 +7,7 @@ from django.db.models import Prefetch
 from game.models import Answer, GameSession, Player, Round
 
 
-def get_session_state(code: str) -> tuple[GameSession, dict] | None:
+def get_session_state(code: str, *, viewer_player_id: int | None = None) -> tuple[GameSession, dict] | None:
     session = (
         GameSession.objects.select_related("music_set")
         .prefetch_related(
@@ -50,6 +50,7 @@ def get_session_state(code: str) -> tuple[GameSession, dict] | None:
         "current_round": _serialize_round(
             current_round,
             total_players=len(session.players.all()),
+            viewer_player_id=viewer_player_id,
         ),
     }
 
@@ -70,7 +71,12 @@ def build_snapshot_etag(snapshot: dict) -> str:
     return f'"{digest}"'
 
 
-def _serialize_round(round_obj: Round | None, *, total_players: int) -> dict | None:
+def _serialize_round(
+    round_obj: Round | None,
+    *,
+    total_players: int,
+    viewer_player_id: int | None,
+) -> dict | None:
     if round_obj is None:
         return None
 
@@ -92,6 +98,21 @@ def _serialize_round(round_obj: Round | None, *, total_players: int) -> dict | N
         "answered_count": len(round_obj.answers.all()),
         "total_players": total_players,
     }
+
+    if viewer_player_id is not None:
+        viewer_answer = next(
+            (answer for answer in round_obj.answers.all() if answer.player_id == viewer_player_id),
+            None,
+        )
+        if viewer_answer is not None:
+            payload["viewer_answer"] = {
+                "selected_artist": viewer_answer.selected_artist,
+                "submitted_at": viewer_answer.submitted_at,
+                "response_ms": viewer_answer.response_ms,
+            }
+            if round_obj.locked_at is not None:
+                payload["viewer_answer"]["is_correct"] = viewer_answer.is_correct
+                payload["viewer_answer"]["points_awarded"] = viewer_answer.points_awarded
 
     if round_obj.locked_at is not None:
         payload["track"] = {

@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from catalog.models import MusicSet, Track
 from game import codegen, spotify_auth, views as game_views
-from game.models import GameSession, Player, Round
+from game.models import Answer, GameSession, Player, Round
 
 
 @pytest.fixture
@@ -405,6 +405,15 @@ def _bind_host_session(client, session):
     session.host_session_key = session_data.session_key
     session.save(update_fields=["host_session_key"])
 
+
+def _bind_player_session(client, session, player):
+    session_data = client.session
+    session_data[game_views.PLAYER_SESSION_BINDING_SESSION_KEY] = {
+        "session_code": session.code,
+        "player_id": player.pk,
+    }
+    session_data.save()
+
 def _set_playback_ready(client, session, *, device_id="spotify-device-1"):
     session_data = client.session
     session_data[game_views.SPOTIFY_PLAYBACK_SESSION_KEY] = {
@@ -636,6 +645,7 @@ def test_player_join_renders_bound_player_lobby(client, session):
     assert "Adam" in content
     assert reverse("game:session-state", kwargs={"code": session.code}) in content
     assert "Who is here" in content
+    assert response.headers["Cache-Control"] == "no-store"
 
 
 @pytest.mark.django_db
@@ -653,6 +663,32 @@ def test_host_lobby_renders_player_roster_polling_hooks(client, session):
     assert "data-lobby-state-root" in content
     assert 'data-empty-label="No players yet."' in content
     assert reverse("game:session-state", kwargs={"code": session.code}) in content
+
+
+@pytest.mark.django_db
+def test_host_lobby_branches_to_round_surface_with_shared_state_hooks(client, session, track):
+    _set_host_auth(client)
+    _bind_host_session(client, session)
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now()
+    session.save(update_fields=["status", "started_at"])
+    Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now(),
+        deadline_at=timezone.now() + timedelta(seconds=30),
+    )
+
+    response = client.get(reverse("game_host:host-lobby", kwargs={"code": session.code}))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "data-round-state-root" in content
+    assert reverse("game:session-state", kwargs={"code": session.code}) in content
+    assert "Round 1 is live." in content
 
 @pytest.mark.django_db
 def test_start_round_rejects_host_without_ready_playback(client, session):
@@ -1247,6 +1283,288 @@ def test_player_lobby_renders_current_player_polling_hooks(client, session):
     assert response.status_code == 200
     assert "data-lobby-state-root" in content
     assert 'data-current-player="Adam"' in content
+
+
+@pytest.mark.django_db
+def test_player_lobby_branches_to_round_surface_for_bound_player(client, session, track):
+    joined_player = Player.objects.create(session=session, name="Adam")
+    _bind_player_session(client, session, joined_player)
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now()
+    session.save(update_fields=["status", "started_at"])
+    Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now(),
+        deadline_at=timezone.now() + timedelta(seconds=30),
+    )
+
+    response = client.get(reverse("game_host:player-lobby", kwargs={"code": session.code}))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "data-round-state-root" in content
+    assert reverse("game:session-state", kwargs={"code": session.code}) in content
+    assert reverse("game:session-answer", kwargs={"code": session.code}) in content
+    assert "You are in the lobby." not in content
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+@pytest.mark.django_db
+def test_player_answer_persists_first_click_scores_and_locks_single_player_round(client, session, track):
+    joined_player = Player.objects.create(session=session, name="Adam")
+    _bind_player_session(client, session, joined_player)
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now()
+    session.save(update_fields=["status", "started_at"])
+    current_round = Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now() - timedelta(seconds=5),
+        deadline_at=timezone.now() + timedelta(seconds=25),
+    )
+
+    response = client.post(
+        reverse("game:session-answer", kwargs={"code": session.code}),
+        data=json.dumps({"artist": track.artist}),
+        content_type="application/json",
+    )
+
+    current_round.refresh_from_db()
+    joined_player.refresh_from_db()
+    stored_answer = Answer.objects.get(round=current_round, player=joined_player)
+    assert response.status_code == 200
+    assert stored_answer.selected_artist == track.artist
+    assert stored_answer.is_correct is True
+    assert stored_answer.points_awarded > 0
+    assert joined_player.score == stored_answer.points_awarded
+    assert current_round.locked_at is not None
+
+
+@pytest.mark.django_db
+def test_session_state_returns_bound_player_answer_without_revealing_result_before_lock(client, session, track):
+    joined_player = Player.objects.create(session=session, name="Adam")
+    _bind_player_session(client, session, joined_player)
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now()
+    session.save(update_fields=["status", "started_at"])
+    current_round = Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now(),
+        deadline_at=timezone.now() + timedelta(seconds=30),
+    )
+    Answer.objects.create(
+        round=current_round,
+        player=joined_player,
+        selected_artist="Artist B",
+        submitted_at=timezone.now(),
+        response_ms=1_250,
+        is_correct=False,
+        points_awarded=0,
+    )
+
+    response = client.get(reverse("game:session-state", kwargs={"code": session.code}))
+
+    round_body = response.json()["current_round"]
+    assert response.status_code == 200
+    assert round_body["viewer_answer"] == {
+        "selected_artist": "Artist B",
+        "submitted_at": round_body["viewer_answer"]["submitted_at"],
+        "response_ms": 1_250,
+    }
+    assert "track" not in round_body
+    assert "is_correct" not in round_body["viewer_answer"]
+    assert "points_awarded" not in round_body["viewer_answer"]
+
+
+@pytest.mark.django_db
+def test_session_state_reveals_viewer_result_after_round_lock(client, session, track):
+    joined_player = Player.objects.create(session=session, name="Adam", score=700)
+    _bind_player_session(client, session, joined_player)
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now()
+    session.save(update_fields=["status", "started_at"])
+    current_round = Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now() - timedelta(seconds=10),
+        deadline_at=timezone.now() + timedelta(seconds=20),
+        locked_at=timezone.now(),
+    )
+    Answer.objects.create(
+        round=current_round,
+        player=joined_player,
+        selected_artist=track.artist,
+        submitted_at=timezone.now(),
+        response_ms=10_000,
+        is_correct=True,
+        points_awarded=700,
+    )
+
+    response = client.get(reverse("game:session-state", kwargs={"code": session.code}))
+
+    round_body = response.json()["current_round"]
+    assert response.status_code == 200
+    assert round_body["track"]["artist"] == track.artist
+    assert round_body["viewer_answer"]["selected_artist"] == track.artist
+    assert round_body["viewer_answer"]["is_correct"] is True
+    assert round_body["viewer_answer"]["points_awarded"] == 700
+
+
+@pytest.mark.django_db
+def test_player_answer_rejects_second_submission_from_same_bound_player(client, session, track):
+    joined_player = Player.objects.create(session=session, name="Adam")
+    Player.objects.create(session=session, name="Beata")
+    _bind_player_session(client, session, joined_player)
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now()
+    session.save(update_fields=["status", "started_at"])
+    current_round = Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now(),
+        deadline_at=timezone.now() + timedelta(seconds=30),
+    )
+
+    first_response = client.post(
+        reverse("game:session-answer", kwargs={"code": session.code}),
+        data=json.dumps({"artist": track.artist}),
+        content_type="application/json",
+    )
+    second_response = client.post(
+        reverse("game:session-answer", kwargs={"code": session.code}),
+        data=json.dumps({"artist": "Artist A"}),
+        content_type="application/json",
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 409
+    assert second_response.json()["error"]["code"] == "answer_already_submitted"
+    assert Answer.objects.filter(round=current_round, player=joined_player).count() == 1
+
+
+@pytest.mark.django_db
+def test_player_answer_uses_linear_time_weighted_scoring(client, session, track):
+    joined_player = Player.objects.create(session=session, name="Adam")
+    _bind_player_session(client, session, joined_player)
+    started_at = timezone.now()
+    session.status = GameSession.Status.PLAYING
+    session.started_at = started_at
+    session.save(update_fields=["status", "started_at"])
+    current_round = Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=started_at,
+        deadline_at=started_at + timedelta(seconds=30),
+    )
+    answer_time = started_at + timedelta(seconds=5)
+
+    with mock.patch("game.views.timezone.now", return_value=answer_time):
+        response = client.post(
+            reverse("game:session-answer", kwargs={"code": session.code}),
+            data=json.dumps({"artist": track.artist}),
+            content_type="application/json",
+        )
+
+    joined_player.refresh_from_db()
+    stored_answer = Answer.objects.get(round=current_round, player=joined_player)
+    assert response.status_code == 200
+    assert stored_answer.response_ms == 5_000
+    assert stored_answer.points_awarded == 833
+    assert joined_player.score == 833
+
+
+@pytest.mark.django_db
+def test_last_joined_player_answer_locks_round_when_all_players_have_answered(client, session, track):
+    first_player = Player.objects.create(session=session, name="Adam")
+    second_player = Player.objects.create(session=session, name="Beata")
+    _bind_player_session(client, session, second_player)
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now()
+    session.save(update_fields=["status", "started_at"])
+    current_round = Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now(),
+        deadline_at=timezone.now() + timedelta(seconds=30),
+    )
+    Answer.objects.create(
+        round=current_round,
+        player=first_player,
+        selected_artist="Artist A",
+        submitted_at=timezone.now(),
+        response_ms=2_000,
+        is_correct=False,
+        points_awarded=0,
+    )
+
+    response = client.post(
+        reverse("game:session-answer", kwargs={"code": session.code}),
+        data=json.dumps({"artist": track.artist}),
+        content_type="application/json",
+    )
+
+    current_round.refresh_from_db()
+    assert response.status_code == 200
+    assert response.json()["locked"] is True
+    assert current_round.locked_at is not None
+
+
+@pytest.mark.django_db
+def test_player_lobby_refresh_preserves_answered_waiting_state(client, session, track):
+    joined_player = Player.objects.create(session=session, name="Adam")
+    _bind_player_session(client, session, joined_player)
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now()
+    session.save(update_fields=["status", "started_at"])
+    current_round = Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now(),
+        deadline_at=timezone.now() + timedelta(seconds=30),
+    )
+    Answer.objects.create(
+        round=current_round,
+        player=joined_player,
+        selected_artist="Artist B",
+        submitted_at=timezone.now(),
+        response_ms=2_000,
+        is_correct=False,
+        points_awarded=0,
+    )
+
+    response = client.get(reverse("game_host:player-lobby", kwargs={"code": session.code}))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "Answer locked: Artist B. Waiting for the round to close." in content
+    assert "data-answer-options" in content
+    assert "hidden" in content
 
 
 @pytest.mark.django_db

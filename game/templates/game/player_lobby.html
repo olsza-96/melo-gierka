@@ -31,6 +31,7 @@
         class="roster-card"
         data-lobby-state-root
         data-state-url="{% url 'game:session-state' code=player_session.code %}"
+        data-session-page-url="{% url 'game_host:player-lobby' code=player_session.code %}"
         data-empty-label="You are the first player in the room."
         data-current-player="{{ joined_player.name }}"
       >
@@ -55,5 +56,5 @@
     </section>
   </main>
 
-  <script src="{% static 'game/lobby.js' %}" defer></script>
+  <script src="{% static 'game/lobby.js' %}?v=20260605b" defer></script>
 {% endblock %}

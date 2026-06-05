@@ -33,6 +33,16 @@
     return item;
   }
 
+  function shouldTransitionToRound(snapshot) {
+    return snapshot && snapshot.status === "playing" && snapshot.current_round;
+  }
+
+  function transitionToRound(root) {
+    const sessionPageUrl = root.dataset.sessionPageUrl || window.location.href;
+    const separator = sessionPageUrl.includes("?") ? "&" : "?";
+    window.location.assign(`${sessionPageUrl}${separator}round=live`);
+  }
+
   function renderPlayers(root, snapshot) {
     const players = Array.isArray(snapshot.players) ? snapshot.players : [];
     const currentPlayer = root.dataset.currentPlayer || "";
@@ -97,7 +107,14 @@
       }
 
       etag = response.headers.get("ETag") || etag;
-      renderPlayers(root, await response.json());
+      const snapshot = await response.json();
+
+      if (shouldTransitionToRound(snapshot)) {
+        transitionToRound(root);
+        return;
+      }
+
+      renderPlayers(root, snapshot);
     }
 
     await requestSnapshot();

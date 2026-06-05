@@ -20,5 +20,10 @@ urlpatterns = [
         views.session_start_round,
         name="session-start-round",
     ),
+    path(
+        "sessions/<str:code>/answer",
+        views.session_answer,
+        name="session-answer",
+    ),
     path("sessions/<str:code>/state", views.session_state, name="session-state"),
 ]

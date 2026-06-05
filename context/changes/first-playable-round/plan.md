@@ -357,14 +357,14 @@ This slice introduces real gameplay persistence. Expect a schema migration for t
 
 #### Automated
 
-- [ ] 2.1 Player-answer and scoring tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "player_answer or early_lock or scoring"`
-- [ ] 2.2 Round-state and `ETag` tests still pass with the extended snapshot shape: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "session_state or round_state or etag"`
+- [x] 2.1 Player-answer and scoring tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "player_answer or early_lock or scoring"`
+- [x] 2.2 Round-state and `ETag` tests still pass with the extended snapshot shape: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "session_state or round_state or etag"`
 
 #### Manual
 
-- [ ] 2.3 A joined player sees four artist options within roughly one second of the host starting the round, and the first click locks that answer immediately.
-- [ ] 2.4 When all joined players answer before the scheduled 30-second deadline, the round closes early instead of waiting for the full timer.
-- [ ] 2.5 Refreshing the player page after answering preserves the answered-waiting or result state instead of reopening the question.
+- [x] 2.3 A joined player sees four artist options within roughly one second of the host starting the round, and the first click locks that answer immediately.
+- [x] 2.4 When all joined players answer before the scheduled 30-second deadline, the round closes early instead of waiting for the full timer.
+- [x] 2.5 Refreshing the player page after answering preserves the answered-waiting or result state instead of reopening the question.
 
 ### Phase 3: Host Control Surface And Round-End Results
 

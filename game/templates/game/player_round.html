@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}melo-gierka | round {{ current_round.index }}{% endblock %}
+
+{% block content %}
+  <main class="lobby-grid">
+    <section class="panel lobby-hero">
+      <p class="eyebrow">player round</p>
+      <h1>Round {{ current_round.index }} is live.</h1>
+      <p class="panel-copy">
+        Pick the correct artist from the four options below. Your first click locks in your answer.
+      </p>
+
+      <div class="session-code-card" aria-label="Session code">
+        <span class="session-code-label">Session code</span>
+        <strong class="session-code-value">{{ player_session.code }}</strong>
+      </div>
+
+      <p class="lobby-status">Playing as {{ joined_player.name }}.</p>
+    </section>
+
+    <section
+      class="panel playback-card"
+      data-round-state-root
+      data-state-url="{{ session_state_url }}"
+      data-answer-url="{{ session_answer_url }}"
+      data-current-player="{{ joined_player.name }}"
+    >
+      <div hidden>{% csrf_token %}</div>
+      <p class="eyebrow">your answer</p>
+      <h2 data-round-heading>Choose the artist</h2>
+      {% if current_round.locked_at %}
+        <p class="panel-copy" data-round-status>Round locked.</p>
+      {% elif viewer_answer %}
+        <p class="panel-copy" data-round-status>Your answer is locked.</p>
+      {% else %}
+        <p class="panel-copy" data-round-status>Round {{ current_round.index }} is live. Pick once.</p>
+      {% endif %}
+      <p class="playback-status" data-round-countdown></p>
+      <div class="playback-actions" data-answer-options{% if current_round.locked_at or viewer_answer %} hidden{% endif %}>
+        {% for option in current_round.answer_options %}
+          <button class="button button-secondary" type="button" data-answer-option value="{{ option }}">{{ option }}</button>
+        {% endfor %}
+      </div>
+      <p class="panel-copy" data-viewer-answer{% if not current_round.locked_at and not viewer_answer %} hidden{% endif %}>
+        {% if current_round.locked_at and current_round.track %}
+          {% if viewer_answer %}
+            Your answer: {{ viewer_answer.selected_artist }}. Correct artist: {{ current_round.track.artist }}.
+          {% else %}
+            Correct artist: {{ current_round.track.artist }}.
+          {% endif %}
+        {% elif viewer_answer %}
+          Answer locked: {{ viewer_answer.selected_artist }}. Waiting for the round to close.
+        {% endif %}
+      </p>
+    </section>
+  </main>
+
+  <script src="{% static 'game/round.js' %}?v=20260605b" defer></script>
+{% endblock %}

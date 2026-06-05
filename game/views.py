@@ -16,7 +16,7 @@ from django.views.decorators.http import require_GET, require_http_methods
 
 from game import codegen, spotify_auth
 from game.forms import HostSessionCreateForm, PlayerJoinForm, build_player_name_suggestion
-from game.models import GameSession, Player, Round
+from game.models import Answer, GameSession, Player, Round
 from game.state import build_snapshot_etag, get_session_state
 
 
@@ -31,6 +31,7 @@ PLAYER_SESSION_BINDING_SESSION_KEY = "joined_player"
 ROUND_DURATION_MS = 30_000
 ROUND_OFFSET_MIN_RATIO = 0.2
 ROUND_OFFSET_MAX_RATIO = 0.8
+ROUND_MAX_POINTS = 1_000
 PLAYBACK_DEVICE_READY_ATTEMPTS = 5
 PLAYBACK_DEVICE_READY_DELAY_SECONDS = 0.2
 
@@ -236,6 +237,39 @@ def _build_round_offset_ms(duration_ms: int) -> int:
 
 def _current_round_for_host(session: GameSession) -> Round | None:
     return session.rounds.select_related("track").order_by("-index").first()
+
+
+def _current_round_for_session(session: GameSession) -> Round | None:
+    return session.rounds.select_related("track").order_by("-index").first()
+
+
+def _session_page_response(response):
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+def _round_response_ms(round_obj: Round, *, answered_at) -> int:
+    elapsed_ms = max(0, int((answered_at - round_obj.started_at).total_seconds() * 1000))
+    if round_obj.deadline_at is None:
+        return elapsed_ms
+    max_window_ms = max(1, int((round_obj.deadline_at - round_obj.started_at).total_seconds() * 1000))
+    return min(elapsed_ms, max_window_ms)
+
+
+def _calculate_points_awarded(round_obj: Round, *, selected_artist: str, response_ms: int) -> int:
+    if selected_artist != round_obj.track.artist:
+        return 0
+
+    if round_obj.deadline_at is None:
+        total_window_ms = ROUND_DURATION_MS
+    else:
+        total_window_ms = max(
+            1,
+            int((round_obj.deadline_at - round_obj.started_at).total_seconds() * 1000),
+        )
+
+    remaining_ratio = max(0.0, 1 - (response_ms / total_window_ms))
+    return max(0, round(ROUND_MAX_POINTS * remaining_ratio))
 
 
 def _wait_for_commandable_playback_device(*, access_token: str, device_id: str) -> dict | None:
@@ -620,7 +654,7 @@ def host_lobby(request, code):
         spotify_access_token = ""
 
     if session.status == GameSession.Status.PLAYING and current_round is not None:
-        return render(
+        return _session_page_response(render(
             request,
             "game/host_round.html",
             {
@@ -633,10 +667,10 @@ def host_lobby(request, code):
                     kwargs={"code": session.code},
                 ),
             },
-        )
+        ))
 
     form = HostSessionCreateForm(initial={"music_set": session.music_set_id})
-    return render(
+    return _session_page_response(render(
         request,
         "game/host_lobby.html",
         {
@@ -654,7 +688,7 @@ def host_lobby(request, code):
                 kwargs={"code": session.code},
             ),
         },
-    )
+    ))
 
 
 @require_http_methods(["POST"])
@@ -735,19 +769,37 @@ def player_lobby(request, code):
         messages.error(request, "Join a session before entering the player lobby.")
         return redirect(f"{reverse('game_host:player-join')}?code={code}")
 
-    return render(
+    current_round = _current_round_for_session(player.session)
+    if player.session.status == GameSession.Status.PLAYING and current_round is not None:
+        viewer_answer = Answer.objects.filter(round=current_round, player=player).first()
+        return _session_page_response(render(
+            request,
+            "game/player_round.html",
+            {
+                "joined_player": player,
+                "player_session": player.session,
+                "current_round": current_round,
+                "viewer_answer": viewer_answer,
+                "session_state_url": reverse("game:session-state", kwargs={"code": player.session.code}),
+                "session_answer_url": reverse("game:session-answer", kwargs={"code": player.session.code}),
+            },
+        ))
+
+    return _session_page_response(render(
         request,
         "game/player_lobby.html",
         {
             "joined_player": player,
             "player_session": player.session,
         },
-    )
+    ))
 
 
 @require_GET
 def session_state(request, code):
-    state = get_session_state(code)
+    bound_player = _get_bound_player(request, code=code)
+    viewer_player_id = bound_player.pk if bound_player is not None else None
+    state = get_session_state(code, viewer_player_id=viewer_player_id)
     if state is None:
         return JsonResponse(
             {
@@ -781,6 +833,168 @@ def session_state(request, code):
     response["ETag"] = etag
     response["Cache-Control"] = cache_control
     return response
+
+
+@require_http_methods(["POST"])
+def session_answer(request, code):
+    bound_player = _get_bound_player(request, code=code)
+    if bound_player is None:
+        return JsonResponse(
+            {
+                "error": {
+                    "code": "player_not_bound",
+                    "message": "Join this session from the current browser before answering.",
+                }
+            },
+            status=403,
+        )
+
+    try:
+        payload = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        payload = {}
+
+    selected_artist = str(payload.get("artist") or "").strip()
+    if not selected_artist:
+        return JsonResponse(
+            {
+                "error": {
+                    "code": "missing_artist",
+                    "message": "Pick one artist before submitting an answer.",
+                }
+            },
+            status=400,
+        )
+
+    answered_at = timezone.now()
+
+    try:
+        with transaction.atomic():
+            player = Player.objects.select_for_update().select_related("session").get(pk=bound_player.pk)
+            session = GameSession.objects.select_for_update().get(pk=player.session_id)
+
+            if session.status != GameSession.Status.PLAYING:
+                return JsonResponse(
+                    {
+                        "error": {
+                            "code": "session_not_playing",
+                            "message": "This round is not accepting answers right now.",
+                        }
+                    },
+                    status=409,
+                )
+
+            round_obj = session.rounds.select_for_update().select_related("track").order_by("-index").first()
+            if round_obj is None:
+                return JsonResponse(
+                    {
+                        "error": {
+                            "code": "round_not_found",
+                            "message": "This session does not have an active round.",
+                        }
+                    },
+                    status=409,
+                )
+
+            if round_obj.paused_at is not None:
+                return JsonResponse(
+                    {
+                        "error": {
+                            "code": "round_paused",
+                            "message": "This round is paused right now.",
+                        }
+                    },
+                    status=409,
+                )
+
+            if round_obj.locked_at is not None:
+                return JsonResponse(
+                    {
+                        "error": {
+                            "code": "round_locked",
+                            "message": "This round is already locked.",
+                        }
+                    },
+                    status=409,
+                )
+
+            if round_obj.deadline_at is not None and answered_at >= round_obj.deadline_at:
+                round_obj.locked_at = answered_at
+                round_obj.save(update_fields=["locked_at"])
+                return JsonResponse(
+                    {
+                        "error": {
+                            "code": "round_locked",
+                            "message": "This round is already locked.",
+                        }
+                    },
+                    status=409,
+                )
+
+            if selected_artist not in round_obj.answer_options:
+                return JsonResponse(
+                    {
+                        "error": {
+                            "code": "invalid_artist_option",
+                            "message": "Choose one of the current round options.",
+                        }
+                    },
+                    status=400,
+                )
+
+            if Answer.objects.filter(round=round_obj, player=player).exists():
+                return JsonResponse(
+                    {
+                        "error": {
+                            "code": "answer_already_submitted",
+                            "message": "This player has already locked an answer for the round.",
+                        }
+                    },
+                    status=409,
+                )
+
+            response_ms = _round_response_ms(round_obj, answered_at=answered_at)
+            points_awarded = _calculate_points_awarded(
+                round_obj,
+                selected_artist=selected_artist,
+                response_ms=response_ms,
+            )
+            answer = Answer.objects.create(
+                round=round_obj,
+                player=player,
+                selected_artist=selected_artist,
+                submitted_at=answered_at,
+                response_ms=response_ms,
+                is_correct=selected_artist == round_obj.track.artist,
+                points_awarded=points_awarded,
+            )
+
+            if answer.points_awarded > 0:
+                player.score += answer.points_awarded
+                player.save(update_fields=["score"])
+
+            if Answer.objects.filter(round=round_obj).count() >= session.players.count():
+                round_obj.locked_at = answered_at
+                round_obj.save(update_fields=["locked_at"])
+
+    except Player.DoesNotExist:
+        return JsonResponse(
+            {
+                "error": {
+                    "code": "player_not_bound",
+                    "message": "Join this session from the current browser before answering.",
+                }
+            },
+            status=403,
+        )
+
+    return JsonResponse(
+        {
+            "accepted": True,
+            "locked": round_obj.locked_at is not None,
+            "points_awarded": answer.points_awarded,
+        }
+    )
 
 
 @require_http_methods(["POST"])
