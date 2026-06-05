@@ -376,8 +376,8 @@ This slice introduces real gameplay persistence. Expect a schema migration for t
 #### Manual
 
 - [x] 3.3 Pause freezes playback and the countdown for all connected clients, and resume continues the same round. — 1e783d7
-- [x] 3.4 Skip reveals the round result immediately, while restart discards the current round and creates a fresh replacement with cleared answers.
-- [x] 3.5 Correct artist and updated scores appear only after lock or skip, not immediately when a player answers.
+- [x] 3.4 Skip reveals the round result immediately, while restart discards the current round and creates a fresh replacement with cleared answers. — fc89785
+- [x] 3.5 Correct artist and updated scores appear only after lock or skip, not immediately when a player answers. — fc89785
 
 ### Phase 4: Verification And Smoke Handoff
 
