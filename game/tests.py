@@ -692,6 +692,34 @@ def test_host_lobby_branches_to_round_surface_with_shared_state_hooks(client, se
     assert reverse("game:session-restart", kwargs={"code": session.code}) in content
     assert reverse("game:session-state", kwargs={"code": session.code}) in content
     assert "Round 1 is live." in content
+    assert "round.js?v=20260605n" in content
+
+
+@pytest.mark.django_db
+def test_host_round_locked_surface_renders_complete_countdown(client, session, track):
+    _set_host_auth(client)
+    _bind_host_session(client, session)
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now()
+    session.save(update_fields=["status", "started_at"])
+    Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now() - timedelta(seconds=10),
+        deadline_at=timezone.now() + timedelta(seconds=20),
+        locked_at=timezone.now(),
+    )
+
+    response = client.get(reverse("game_host:host-lobby", kwargs={"code": session.code}))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "Round 1 results." in content
+    assert "Round complete" in content
+    assert "round.js?v=20260605n" in content
 
 
 @pytest.mark.django_db
@@ -856,6 +884,7 @@ def test_resume_round_calls_spotify_outside_database_transaction(client, session
 def test_skip_round_locks_round_and_reveals_results(client, session, track):
     _set_host_auth(client)
     _bind_host_session(client, session)
+    _set_playback_ready(client, session, device_id="device-42")
     joined_player = Player.objects.create(session=session, name="Adam", score=500)
     _bind_player_session(client, session, joined_player)
     session.status = GameSession.Status.PLAYING
@@ -872,7 +901,10 @@ def test_skip_round_locks_round_and_reveals_results(client, session, track):
     )
     skipped_at = timezone.now()
 
-    with mock.patch("game.views.timezone.now", return_value=skipped_at):
+    with mock.patch("game.views.timezone.now", return_value=skipped_at), mock.patch(
+        "game.views._resolve_start_round_playback_device",
+        return_value={"id": "device-42", "is_restricted": False, "is_active": True},
+    ), mock.patch("game.views.spotify_auth.pause_playback") as pause_playback:
         response = client.post(
             reverse("game:session-skip", kwargs={"code": session.code}),
             HTTP_X_REQUESTED_WITH="fetch",
@@ -883,6 +915,10 @@ def test_skip_round_locks_round_and_reveals_results(client, session, track):
     assert response.status_code == 200
     assert current_round.locked_at == skipped_at
     assert state_response.json()["current_round"]["track"]["artist"] == track.artist
+    pause_playback.assert_called_once_with(
+        access_token="access-token",
+        device_id="device-42",
+    )
 
 
 @pytest.mark.django_db
@@ -2061,8 +2097,10 @@ def test_player_lobby_branches_to_locked_result_surface(client, session, track):
     content = response.content.decode()
     assert response.status_code == 200
     assert "Round 1 results." in content
+    assert "Round complete" in content
     assert "Correct artist: Artist A." in content
     assert "data-round-results" in content
+    assert "round.js?v=20260605n" in content
 
 
 @pytest.mark.django_db

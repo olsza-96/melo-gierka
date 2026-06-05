@@ -59,7 +59,13 @@
       {% else %}
         <p class="panel-copy" data-round-status>Round {{ current_round.index }} is live.</p>
       {% endif %}
-      <p class="playback-status" data-round-countdown>Connecting to Spotify browser playback…</p>
+      {% if current_round.locked_at %}
+        <p class="playback-status" data-round-countdown>Round complete</p>
+      {% elif current_round.paused_at %}
+        <p class="playback-status" data-round-countdown>Paused</p>
+      {% else %}
+        <p class="playback-status" data-round-countdown>Connecting to Spotify browser playback…</p>
+      {% endif %}
       <p class="playback-status" data-playback-status>Connecting to Spotify browser playback…</p>
 
       <form id="host-round-control-form" method="post" hidden>
@@ -119,6 +125,6 @@
     </section>
   </main>
 
-  <script src="{% static 'game/spotify_player.js' %}?v=20260605m" defer></script>
-  <script src="{% static 'game/round.js' %}?v=20260605m" defer></script>
+  <script src="{% static 'game/spotify_player.js' %}?v=20260605n" defer></script>
+  <script src="{% static 'game/round.js' %}?v=20260605n" defer></script>
 {% endblock %}

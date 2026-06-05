@@ -1379,6 +1379,78 @@ def session_resume(request, code):
 def session_skip(request, code):
     session = _get_owned_host_session(request, code=code)
 
+    current_round = session.rounds.order_by("-index").first()
+    if session.status != GameSession.Status.PLAYING or current_round is None:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={"code": "round_not_active", "message": "There is no active round to skip."},
+            status=409,
+        )
+
+    if current_round.locked_at is not None:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={"code": "round_locked", "message": "This round is already locked."},
+            status=409,
+        )
+
+    if current_round.paused_at is None:
+        try:
+            access_token, device_id, device_state = _host_playback_device_for_round_control(request, code=code)
+        except spotify_auth.SpotifyOAuthError as exc:
+            logger.warning(
+                "Spotify device lookup failed before skip for session %s: status=%s body=%r",
+                code,
+                exc.status_code,
+                exc.response_body,
+            )
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={
+                    "code": "spotify_device_lookup_failed",
+                    "message": "Spotify browser playback could not be verified right now. Try skipping again.",
+                },
+                status=502,
+            )
+
+        if not access_token or not device_id:
+            message = "Activate the Spotify browser player before skipping the round."
+            error_code = "playback_not_ready"
+            if access_token and device_state is not None:
+                message = _playback_device_error_message(device_state)
+                error_code = "spotify_device_not_ready"
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": error_code, "message": message},
+                status=409,
+            )
+
+        try:
+            spotify_auth.pause_playback(access_token=access_token, device_id=device_id)
+        except spotify_auth.SpotifyOAuthError as exc:
+            logger.warning(
+                "Spotify pause-before-skip failed for session %s on device %s: status=%s body=%r device_state=%r playback_state=%r",
+                code,
+                device_id,
+                exc.status_code,
+                exc.response_body,
+                device_state,
+                _get_host_playback_state(request, code=code),
+            )
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={
+                    "code": "spotify_skip_pause_failed",
+                    "message": "Spotify playback could not be stopped before skipping the round.",
+                },
+                status=502,
+            )
+
     with transaction.atomic():
         locked_session = GameSession.objects.select_for_update().get(pk=session.pk)
         current_round = locked_session.rounds.select_for_update().order_by("-index").first()

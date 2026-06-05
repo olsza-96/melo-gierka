@@ -161,9 +161,8 @@
       return;
     }
 
-    countdownNode.textContent = formatCountdown(snapshot, roundBody.deadline_at);
-
     if (roundBody.phase === "locked") {
+      countdownNode.textContent = "Round complete";
       optionsRoot.hidden = true;
       answerStateNode.hidden = false;
       statusNode.textContent = "Round locked.";
@@ -174,6 +173,8 @@
       }
       return;
     }
+
+    countdownNode.textContent = formatCountdown(snapshot, roundBody.deadline_at);
 
     root.querySelectorAll("[data-answer-option]").forEach(function (button) {
       button.disabled = false;
