@@ -383,10 +383,10 @@ This slice introduces real gameplay persistence. Expect a schema migration for t
 
 #### Automated
 
-- [ ] 4.1 The targeted playable-round suite passes: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "start_round or player_answer or scoring or pause or restart"`
-- [ ] 4.2 Django configuration and migration drift remain clean at slice handoff: `DJANGO_DEBUG=True uv run python manage.py check && DJANGO_DEBUG=True uv run python manage.py makemigrations --check --dry-run`
+- [x] 4.1 The targeted playable-round suite passes: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "start_round or player_answer or scoring or pause or restart"`
+- [x] 4.2 Django configuration and migration drift remain clean at slice handoff: `DJANGO_DEBUG=True uv run python manage.py check && DJANGO_DEBUG=True uv run python manage.py makemigrations --check --dry-run`
 
 #### Manual
 
-- [ ] 4.3 A local host browser plus at least one player browser can complete one real round from start through result state with Spotify playback, answer locking, and updated scores.
-- [ ] 4.4 One deployed Fly smoke run validates the same single-round host/player loop with real OAuth and browser playback.
+- [x] 4.3 A local host browser plus at least one player browser can complete one real round from start through result state with Spotify playback, answer locking, and updated scores.
+- [x] 4.4 One deployed Fly smoke run validates the same single-round host/player loop with real OAuth and browser playback.
