@@ -570,6 +570,29 @@ def test_player_join_rejects_invalid_code_inline(client):
 
 
 @pytest.mark.django_db
+def test_player_join_rejects_deleted_session_inline(client, session, monkeypatch):
+    class DeletedSessionQuerySet:
+        def get(self, **_kwargs):
+            raise GameSession.DoesNotExist
+
+    monkeypatch.setattr(
+        game_views.GameSession.objects,
+        "select_for_update",
+        lambda: DeletedSessionQuerySet(),
+    )
+
+    response = client.post(
+        reverse("game_host:player-join"),
+        {"code": session.code, "name": "Adam"},
+    )
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "Enter a valid session code." in content
+    assert Player.objects.count() == 0
+
+
+@pytest.mark.django_db
 def test_duplicate_name_rejects_player_join_with_suggestion(client, session):
     Player.objects.create(session=session, name="Adam")
 
@@ -583,6 +606,46 @@ def test_duplicate_name_rejects_player_join_with_suggestion(client, session):
     assert "That name is already taken in this session." in content
     assert "Adam 2" in content
     assert Player.objects.filter(session=session, name="Adam").count() == 1
+
+
+@pytest.mark.django_db
+def test_player_join_handles_concurrent_duplicate_name_inline(client, session, monkeypatch):
+    create_called = False
+    suggestion_called = False
+
+    def raise_integrity_error(**_kwargs):
+        nonlocal create_called
+        create_called = True
+        raise IntegrityError
+
+    def fake_suggestion(**_kwargs):
+        nonlocal suggestion_called
+        suggestion_called = True
+        return "Adam 2"
+
+    monkeypatch.setattr(
+        game_views.Player.objects,
+        "create",
+        raise_integrity_error,
+    )
+    monkeypatch.setattr(
+        game_views,
+        "build_player_name_suggestion",
+        fake_suggestion,
+    )
+
+    response = client.post(
+        reverse("game_host:player-join"),
+        {"code": session.code, "name": "Adam"},
+    )
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert create_called is True
+    assert suggestion_called is True
+    assert "already taken in this session." in content
+    assert "Adam 2" in content
+    assert Player.objects.count() == 0
 
 
 @pytest.mark.django_db

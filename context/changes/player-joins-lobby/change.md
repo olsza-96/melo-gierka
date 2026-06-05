@@ -1,9 +1,9 @@
 ---
 change_id: player-joins-lobby
 title: Player joins lobby
-status: implemented
+status: impl_reviewed
 created: 2026-06-04
-updated: 2026-06-04
+updated: 2026-06-05
 archived_at: null
 ---
 

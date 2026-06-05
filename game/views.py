@@ -254,6 +254,8 @@ def player_join(request):
                         session=locked_session,
                         name=player_name,
                     )
+        except GameSession.DoesNotExist:
+            form.add_error("code", "Enter a valid session code.")
         except IntegrityError:
             suggestion = build_player_name_suggestion(
                 session=requested_session,

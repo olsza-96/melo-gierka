@@ -147,6 +147,8 @@ Turn the placeholder player path and static host lobby into the first real share
 
 **Contract**: Styling changes stay scoped to the S-02 lobby/join surfaces and do not redesign the host shell beyond what the new roster and player waiting state require.
 
+**Implementation note**: Manual verification exposed an admin observability gap even though player rows were persisting correctly, so `game/admin.py` was also updated in this slice to show inline players and a session-level player count. This did not change player-facing scope, but it was part of the final implementation needed to verify the slice reliably.
+
 ### Success Criteria:
 
 #### Automated Verification:
