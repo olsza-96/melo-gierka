@@ -25,5 +25,9 @@ urlpatterns = [
         views.session_answer,
         name="session-answer",
     ),
+    path("sessions/<str:code>/pause", views.session_pause, name="session-pause"),
+    path("sessions/<str:code>/resume", views.session_resume, name="session-resume"),
+    path("sessions/<str:code>/skip", views.session_skip, name="session-skip"),
+    path("sessions/<str:code>/restart", views.session_restart, name="session-restart"),
     path("sessions/<str:code>/state", views.session_state, name="session-state"),
 ]

@@ -6,7 +6,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from django.conf import settings
 from django.core.management import call_command
-from django.db import IntegrityError
+from django.db import IntegrityError, connection
 from django.test import Client
 from django.test import override_settings
 from django.urls import reverse
@@ -687,8 +687,393 @@ def test_host_lobby_branches_to_round_surface_with_shared_state_hooks(client, se
     content = response.content.decode()
     assert response.status_code == 200
     assert "data-round-state-root" in content
+    assert 'data-round-controls' in content
+    assert reverse("game:session-pause", kwargs={"code": session.code}) in content
+    assert reverse("game:session-restart", kwargs={"code": session.code}) in content
     assert reverse("game:session-state", kwargs={"code": session.code}) in content
     assert "Round 1 is live." in content
+
+
+@pytest.mark.django_db
+def test_pause_round_marks_round_paused_for_host(client, session, track):
+    _set_host_auth(client)
+    _bind_host_session(client, session)
+    _set_playback_ready(client, session, device_id="device-42")
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now() - timedelta(seconds=10)
+    session.save(update_fields=["status", "started_at"])
+    current_round = Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now() - timedelta(seconds=10),
+        deadline_at=timezone.now() + timedelta(seconds=20),
+    )
+    paused_at = timezone.now()
+
+    with mock.patch("game.views.timezone.now", return_value=paused_at), mock.patch(
+        "game.views._resolve_start_round_playback_device",
+        return_value={"id": "device-42", "is_restricted": False, "is_active": True},
+    ), mock.patch(
+        "game.views.spotify_auth.pause_playback"
+    ) as pause_playback:
+        response = client.post(
+            reverse("game:session-pause", kwargs={"code": session.code}),
+            HTTP_X_REQUESTED_WITH="fetch",
+        )
+
+    current_round.refresh_from_db()
+    body = response.json()
+    assert response.status_code == 200
+    assert current_round.paused_at == paused_at
+    assert body["snapshot"]["current_round"]["phase"] == "paused"
+    pause_playback.assert_called_once_with(
+        access_token="access-token",
+        device_id="device-42",
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_pause_round_calls_spotify_outside_database_transaction(client, session, track):
+    _set_host_auth(client)
+    _bind_host_session(client, session)
+    _set_playback_ready(client, session, device_id="device-42")
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now() - timedelta(seconds=10)
+    session.save(update_fields=["status", "started_at"])
+    Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now() - timedelta(seconds=10),
+        deadline_at=timezone.now() + timedelta(seconds=20),
+    )
+
+    def assert_not_in_transaction(**_kwargs):
+        assert not connection.in_atomic_block
+
+    with mock.patch(
+        "game.views._resolve_start_round_playback_device",
+        return_value={"id": "device-42", "is_restricted": False, "is_active": True},
+    ), mock.patch("game.views.spotify_auth.pause_playback", side_effect=assert_not_in_transaction):
+        response = client.post(
+            reverse("game:session-pause", kwargs={"code": session.code}),
+            HTTP_X_REQUESTED_WITH="fetch",
+        )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_resume_round_shifts_deadline_by_paused_duration(client, session, track):
+    _set_host_auth(client)
+    _bind_host_session(client, session)
+    _set_playback_ready(client, session, device_id="device-42")
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now() - timedelta(seconds=15)
+    session.save(update_fields=["status", "started_at"])
+    paused_at = timezone.now() - timedelta(seconds=5)
+    original_deadline = timezone.now() + timedelta(seconds=15)
+    current_round = Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now() - timedelta(seconds=15),
+        deadline_at=original_deadline,
+        paused_at=paused_at,
+    )
+    resumed_at = timezone.now()
+
+    with mock.patch("game.views.timezone.now", return_value=resumed_at), mock.patch(
+        "game.views._resolve_start_round_playback_device",
+        return_value={"id": "device-42", "is_restricted": False, "is_active": True},
+    ), mock.patch(
+        "game.views._wait_for_active_playback_device",
+        return_value={"id": "device-42", "is_restricted": False, "is_active": True},
+    ), mock.patch("game.views.spotify_auth.transfer_playback") as transfer_playback, mock.patch(
+        "game.views.spotify_auth.resume_playback"
+    ) as resume_playback:
+        response = client.post(
+            reverse("game:session-resume", kwargs={"code": session.code}),
+            HTTP_X_REQUESTED_WITH="fetch",
+        )
+
+    current_round.refresh_from_db()
+    body = response.json()
+    assert response.status_code == 200
+    assert current_round.paused_at is None
+    assert current_round.deadline_at == original_deadline + (resumed_at - paused_at)
+    assert body["snapshot"]["current_round"]["phase"] == "active"
+    transfer_playback.assert_called_once_with(
+        access_token="access-token",
+        device_id="device-42",
+        play=True,
+    )
+    resume_playback.assert_not_called()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_resume_round_calls_spotify_outside_database_transaction(client, session, track):
+    _set_host_auth(client)
+    _bind_host_session(client, session)
+    _set_playback_ready(client, session, device_id="device-42")
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now() - timedelta(seconds=15)
+    session.save(update_fields=["status", "started_at"])
+    Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now() - timedelta(seconds=15),
+        deadline_at=timezone.now() + timedelta(seconds=15),
+        paused_at=timezone.now() - timedelta(seconds=5),
+    )
+
+    def assert_not_in_transaction(**_kwargs):
+        assert not connection.in_atomic_block
+
+    with mock.patch(
+        "game.views._resolve_start_round_playback_device",
+        return_value={"id": "device-42", "is_restricted": False, "is_active": True},
+    ), mock.patch("game.views._resume_round_playback", side_effect=assert_not_in_transaction):
+        response = client.post(
+            reverse("game:session-resume", kwargs={"code": session.code}),
+            HTTP_X_REQUESTED_WITH="fetch",
+        )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_skip_round_locks_round_and_reveals_results(client, session, track):
+    _set_host_auth(client)
+    _bind_host_session(client, session)
+    joined_player = Player.objects.create(session=session, name="Adam", score=500)
+    _bind_player_session(client, session, joined_player)
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now() - timedelta(seconds=10)
+    session.save(update_fields=["status", "started_at"])
+    current_round = Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now() - timedelta(seconds=10),
+        deadline_at=timezone.now() + timedelta(seconds=20),
+    )
+    skipped_at = timezone.now()
+
+    with mock.patch("game.views.timezone.now", return_value=skipped_at):
+        response = client.post(
+            reverse("game:session-skip", kwargs={"code": session.code}),
+            HTTP_X_REQUESTED_WITH="fetch",
+        )
+
+    current_round.refresh_from_db()
+    state_response = client.get(reverse("game:session-state", kwargs={"code": session.code}))
+    assert response.status_code == 200
+    assert current_round.locked_at == skipped_at
+    assert state_response.json()["current_round"]["track"]["artist"] == track.artist
+
+
+@pytest.mark.django_db
+def test_restart_round_replaces_current_round_and_clears_answers(client, session, track):
+    replacement_track = Track.objects.create(
+        music_set=session.music_set,
+        spotify_track_id="replacement-track",
+        artist="Artist Z",
+        title="Title Z",
+        duration_ms=180_000,
+    )
+    Track.objects.create(
+        music_set=session.music_set,
+        spotify_track_id="extra-track-1",
+        artist="Artist B",
+        title="Title B",
+        duration_ms=180_000,
+    )
+    Track.objects.create(
+        music_set=session.music_set,
+        spotify_track_id="extra-track-2",
+        artist="Artist C",
+        title="Title C",
+        duration_ms=180_000,
+    )
+    Track.objects.create(
+        music_set=session.music_set,
+        spotify_track_id="extra-track-3",
+        artist="Artist D",
+        title="Title D",
+        duration_ms=180_000,
+    )
+    joined_player = Player.objects.create(session=session, name="Adam", score=500)
+    _set_host_auth(client)
+    _bind_host_session(client, session)
+    _set_playback_ready(client, session, device_id="device-42")
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now() - timedelta(seconds=10)
+    session.save(update_fields=["status", "started_at"])
+    current_round = Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now() - timedelta(seconds=10),
+        deadline_at=timezone.now() + timedelta(seconds=20),
+    )
+    Answer.objects.create(
+        round=current_round,
+        player=joined_player,
+        selected_artist=track.artist,
+        submitted_at=timezone.now(),
+        response_ms=5_000,
+        is_correct=True,
+        points_awarded=500,
+    )
+
+    with mock.patch("game.views._choose_round_track", return_value=replacement_track), mock.patch(
+        "game.views._build_answer_options",
+        return_value=["Artist B", "Artist C", "Artist D", replacement_track.artist],
+    ), mock.patch("game.views._build_round_offset_ms", return_value=12_345), mock.patch(
+        "game.views._resolve_start_round_playback_device",
+        return_value={"id": "device-42", "is_restricted": False},
+    ), mock.patch(
+        "game.views._wait_for_active_playback_device",
+        return_value={"id": "device-42", "is_restricted": False, "is_active": True},
+    ), mock.patch("game.views.spotify_auth.transfer_playback"), mock.patch(
+        "game.views.spotify_auth.start_playback"
+    ):
+        response = client.post(
+            reverse("game:session-restart", kwargs={"code": session.code}),
+            HTTP_X_REQUESTED_WITH="fetch",
+        )
+
+    replacement_round = Round.objects.get(session=session)
+    assert response.status_code == 200
+    assert Round.objects.filter(session=session).count() == 1
+    assert replacement_round.pk != current_round.pk
+    assert replacement_round.index == 1
+    assert replacement_round.track == replacement_track
+    assert replacement_round.offset_ms == 12_345
+    assert Answer.objects.filter(round=replacement_round).count() == 0
+    assert Answer.objects.filter(round=current_round).count() == 0
+
+
+@pytest.mark.django_db
+def test_pause_resume_pause_sequence_keeps_round_pauseable(client, session, track):
+    _set_host_auth(client)
+    _bind_host_session(client, session)
+    _set_playback_ready(client, session, device_id="device-42")
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now() - timedelta(seconds=10)
+    session.save(update_fields=["status", "started_at"])
+    current_round = Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now() - timedelta(seconds=10),
+        deadline_at=timezone.now() + timedelta(seconds=20),
+    )
+
+    paused_at = timezone.now()
+    resumed_at = paused_at + timedelta(seconds=3)
+    paused_again_at = resumed_at + timedelta(seconds=4)
+
+    with mock.patch("game.views.timezone.now", return_value=paused_at), mock.patch(
+        "game.views._resolve_start_round_playback_device",
+        return_value={"id": "device-42", "is_restricted": False, "is_active": True},
+    ), mock.patch(
+        "game.views.spotify_auth.pause_playback"
+    ) as first_pause:
+        first_response = client.post(
+            reverse("game:session-pause", kwargs={"code": session.code}),
+            HTTP_X_REQUESTED_WITH="fetch",
+        )
+
+    with mock.patch("game.views.timezone.now", return_value=resumed_at), mock.patch(
+        "game.views._resolve_start_round_playback_device",
+        return_value={"id": "device-42", "is_restricted": False, "is_active": True},
+    ), mock.patch(
+        "game.views._wait_for_active_playback_device",
+        return_value={"id": "device-42", "is_restricted": False, "is_active": True},
+    ), mock.patch("game.views.spotify_auth.transfer_playback"), mock.patch(
+        "game.views.spotify_auth.resume_playback"
+    ) as resume_playback:
+        resume_response = client.post(
+            reverse("game:session-resume", kwargs={"code": session.code}),
+            HTTP_X_REQUESTED_WITH="fetch",
+        )
+    resume_playback.assert_not_called()
+
+    with mock.patch("game.views.timezone.now", return_value=paused_again_at), mock.patch(
+        "game.views._resolve_start_round_playback_device",
+        return_value={"id": "device-42", "is_restricted": False, "is_active": True},
+    ), mock.patch(
+        "game.views.spotify_auth.pause_playback"
+    ) as second_pause:
+        second_response = client.post(
+            reverse("game:session-pause", kwargs={"code": session.code}),
+            HTTP_X_REQUESTED_WITH="fetch",
+        )
+
+    current_round.refresh_from_db()
+    assert first_response.status_code == 200
+    assert resume_response.status_code == 200
+    assert second_response.status_code == 200
+    assert current_round.paused_at == paused_again_at
+    assert second_response.json()["snapshot"]["current_round"]["phase"] == "paused"
+    assert first_pause.call_count == 1
+    second_pause.assert_called_once_with(
+        access_token="access-token",
+        device_id="device-42",
+    )
+
+
+@pytest.mark.django_db
+def test_pause_round_reselects_live_device_when_stored_device_drifted(client, session, track):
+    _set_host_auth(client)
+    _bind_host_session(client, session)
+    _set_playback_ready(client, session, device_id="browser-device-42")
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now() - timedelta(seconds=10)
+    session.save(update_fields=["status", "started_at"])
+    Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now() - timedelta(seconds=10),
+        deadline_at=timezone.now() + timedelta(seconds=20),
+    )
+
+    with mock.patch(
+        "game.views._resolve_start_round_playback_device",
+        return_value={"id": "desktop-device-99", "is_restricted": False, "is_active": True},
+    ), mock.patch("game.views.spotify_auth.pause_playback") as pause_playback:
+        response = client.post(
+            reverse("game:session-pause", kwargs={"code": session.code}),
+            HTTP_X_REQUESTED_WITH="fetch",
+        )
+
+    assert response.status_code == 200
+    assert client.session[game_views.SPOTIFY_PLAYBACK_SESSION_KEY]["device_id"] == "desktop-device-99"
+    pause_playback.assert_called_once_with(
+        access_token="access-token",
+        device_id="desktop-device-99",
+    )
 
 @pytest.mark.django_db
 def test_start_round_rejects_host_without_ready_playback(client, session):
@@ -1425,6 +1810,83 @@ def test_session_state_reveals_viewer_result_after_round_lock(client, session, t
 
 
 @pytest.mark.django_db
+def test_session_state_hides_updated_scores_until_round_lock(client, session, track):
+    joined_player = Player.objects.create(session=session, name="Adam", score=500)
+    _bind_player_session(client, session, joined_player)
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now()
+    session.save(update_fields=["status", "started_at"])
+    current_round = Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now() - timedelta(seconds=10),
+        deadline_at=timezone.now() + timedelta(seconds=20),
+    )
+    Answer.objects.create(
+        round=current_round,
+        player=joined_player,
+        selected_artist=track.artist,
+        submitted_at=timezone.now(),
+        response_ms=10_000,
+        is_correct=True,
+        points_awarded=500,
+    )
+
+    response = client.get(reverse("game:session-state", kwargs={"code": session.code}))
+
+    assert response.status_code == 200
+    assert response.json()["players"] == [
+        {
+            "name": "Adam",
+            "score": 0,
+            "joined_at": response.json()["players"][0]["joined_at"],
+        }
+    ]
+
+
+@pytest.mark.django_db
+def test_session_state_reveals_updated_scores_after_round_lock(client, session, track):
+    joined_player = Player.objects.create(session=session, name="Adam", score=500)
+    _bind_player_session(client, session, joined_player)
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now()
+    session.save(update_fields=["status", "started_at"])
+    current_round = Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now() - timedelta(seconds=10),
+        deadline_at=timezone.now() + timedelta(seconds=20),
+        locked_at=timezone.now(),
+    )
+    Answer.objects.create(
+        round=current_round,
+        player=joined_player,
+        selected_artist=track.artist,
+        submitted_at=timezone.now(),
+        response_ms=10_000,
+        is_correct=True,
+        points_awarded=500,
+    )
+
+    response = client.get(reverse("game:session-state", kwargs={"code": session.code}))
+
+    assert response.status_code == 200
+    assert response.json()["players"] == [
+        {
+            "name": "Adam",
+            "score": 500,
+            "joined_at": response.json()["players"][0]["joined_at"],
+        }
+    ]
+
+
+@pytest.mark.django_db
 def test_player_answer_rejects_second_submission_from_same_bound_player(client, session, track):
     joined_player = Player.objects.create(session=session, name="Adam")
     Player.objects.create(session=session, name="Beata")
@@ -1565,6 +2027,42 @@ def test_player_lobby_refresh_preserves_answered_waiting_state(client, session, 
     assert "Answer locked: Artist B. Waiting for the round to close." in content
     assert "data-answer-options" in content
     assert "hidden" in content
+
+
+@pytest.mark.django_db
+def test_player_lobby_branches_to_locked_result_surface(client, session, track):
+    joined_player = Player.objects.create(session=session, name="Adam", score=500)
+    _bind_player_session(client, session, joined_player)
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now()
+    session.save(update_fields=["status", "started_at"])
+    current_round = Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now() - timedelta(seconds=10),
+        deadline_at=timezone.now() + timedelta(seconds=20),
+        locked_at=timezone.now(),
+    )
+    Answer.objects.create(
+        round=current_round,
+        player=joined_player,
+        selected_artist=track.artist,
+        submitted_at=timezone.now(),
+        response_ms=10_000,
+        is_correct=True,
+        points_awarded=500,
+    )
+
+    response = client.get(reverse("game_host:player-lobby", kwargs={"code": session.code}))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "Round 1 results." in content
+    assert "Correct artist: Artist A." in content
+    assert "data-round-results" in content
 
 
 @pytest.mark.django_db

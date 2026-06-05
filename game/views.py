@@ -1,5 +1,6 @@
-import json
 import hmac
+import json
+import logging
 import secrets
 import time
 from datetime import timedelta
@@ -34,6 +35,7 @@ ROUND_OFFSET_MAX_RATIO = 0.8
 ROUND_MAX_POINTS = 1_000
 PLAYBACK_DEVICE_READY_ATTEMPTS = 5
 PLAYBACK_DEVICE_READY_DELAY_SECONDS = 0.2
+logger = logging.getLogger(__name__)
 
 
 def _root_redirect() -> str:
@@ -246,6 +248,94 @@ def _current_round_for_session(session: GameSession) -> Round | None:
 def _session_page_response(response):
     response["Cache-Control"] = "no-store"
     return response
+
+
+def _is_fetch_request(request) -> bool:
+    return request.headers.get("X-Requested-With") == "fetch"
+
+
+def _round_control_error_response(request, *, code: str, error: dict, status: int):
+    if _is_fetch_request(request):
+        return JsonResponse({"error": error}, status=status)
+
+    messages.error(request, error.get("message") or "Round control failed.")
+    return redirect("game_host:host-lobby", code=code)
+
+
+def _round_control_success_response(request, *, code: str, payload: dict):
+    if _is_fetch_request(request):
+        return JsonResponse(payload)
+
+    return redirect("game_host:host-lobby", code=code)
+
+
+def _set_host_playback_device(request, *, playback_state: dict, device_id: str) -> dict:
+    if device_id == playback_state.get("device_id"):
+        return playback_state
+
+    request.session[SPOTIFY_PLAYBACK_SESSION_KEY] = {
+        **playback_state,
+        "device_id": device_id,
+    }
+    return request.session[SPOTIFY_PLAYBACK_SESSION_KEY]
+
+
+def _host_playback_device_for_round_control(request, *, code: str):
+    playback_state = _get_host_playback_state(request, code=code)
+    access_token = _get_host_access_token(request)
+    if not playback_state or not playback_state.get("ready") or not access_token:
+        return None, None, None
+
+    device_state = _resolve_start_round_playback_device(
+        access_token=access_token,
+        preferred_device_id=playback_state["device_id"],
+    )
+    if device_state is None or device_state.get("is_restricted"):
+        return access_token, None, device_state
+
+    if device_state.get("id"):
+        playback_state = _set_host_playback_device(
+            request,
+            playback_state=playback_state,
+            device_id=device_state["id"],
+        )
+
+    return access_token, playback_state.get("device_id"), device_state
+
+
+def _build_replacement_round(
+    session: GameSession,
+    *,
+    access_token: str,
+    device_id: str,
+) -> Round | None:
+    track = _choose_round_track(session, access_token=access_token)
+    if track is None:
+        return None
+
+    answer_options = _build_answer_options(session, correct_artist=track.artist)
+    if answer_options is None:
+        return None
+
+    started_at = timezone.now()
+    offset_ms = _build_round_offset_ms(track.duration_ms)
+    round_obj = Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=offset_ms,
+        answer_options=answer_options,
+        started_at=started_at,
+        deadline_at=started_at + timedelta(milliseconds=ROUND_DURATION_MS),
+    )
+
+    _start_round_playback(
+        access_token=access_token,
+        device_id=device_id,
+        spotify_track_id=track.spotify_track_id,
+        position_ms=offset_ms,
+    )
+    return round_obj
 
 
 def _round_response_ms(round_obj: Round, *, answered_at) -> int:
@@ -510,6 +600,39 @@ def _start_round_playback(
         raise last_error
 
 
+def _resume_round_playback(*, access_token: str, device_id: str) -> None:
+    spotify_auth.transfer_playback(
+        access_token=access_token,
+        device_id=device_id,
+        play=True,
+    )
+
+    active_device = _wait_for_active_playback_device(
+        access_token=access_token,
+        device_id=device_id,
+    )
+    if active_device is None or active_device.get("is_restricted") or not active_device.get("is_active"):
+        raise spotify_auth.SpotifyOAuthError(
+            _playback_device_active_error_message(active_device),
+            status_code=409,
+            response_body={"device": active_device},
+        )
+
+
+def _host_round_control_payload(*, code: str) -> dict:
+    state = get_session_state(code)
+    if state is None:
+        return {}
+
+    _, snapshot = state
+    return {
+        "snapshot": {
+            **snapshot,
+            "server_now": timezone.now(),
+        }
+    }
+
+
 def _get_owned_host_session(request, *, code: str) -> GameSession:
     session_key = request.session.session_key
     if session_key is None:
@@ -666,6 +789,10 @@ def host_lobby(request, code):
                     "game:session-playback-ready",
                     kwargs={"code": session.code},
                 ),
+                "session_pause_url": reverse("game:session-pause", kwargs={"code": session.code}),
+                "session_resume_url": reverse("game:session-resume", kwargs={"code": session.code}),
+                "session_skip_url": reverse("game:session-skip", kwargs={"code": session.code}),
+                "session_restart_url": reverse("game:session-restart", kwargs={"code": session.code}),
             },
         ))
 
@@ -994,6 +1121,420 @@ def session_answer(request, code):
             "locked": round_obj.locked_at is not None,
             "points_awarded": answer.points_awarded,
         }
+    )
+
+
+@require_http_methods(["POST"])
+def session_pause(request, code):
+    session = _get_owned_host_session(request, code=code)
+    try:
+        access_token, device_id, device_state = _host_playback_device_for_round_control(request, code=code)
+    except spotify_auth.SpotifyOAuthError as exc:
+        logger.warning(
+            "Spotify device lookup failed before pause for session %s: status=%s body=%r",
+            code,
+            exc.status_code,
+            exc.response_body,
+        )
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={
+                "code": "spotify_device_lookup_failed",
+                "message": "Spotify browser playback could not be verified right now. Try pausing again.",
+            },
+            status=502,
+        )
+
+    if not access_token or not device_id:
+        message = "Activate the Spotify browser player before pausing the round."
+        error_code = "playback_not_ready"
+        if access_token and device_state is not None:
+            message = _playback_device_error_message(device_state)
+            error_code = "spotify_device_not_ready"
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={
+                "code": error_code,
+                "message": message,
+            },
+            status=409,
+        )
+
+    current_round = session.rounds.order_by("-index").first()
+    if session.status != GameSession.Status.PLAYING or current_round is None:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={"code": "round_not_active", "message": "There is no active round to pause."},
+            status=409,
+        )
+
+    if current_round.locked_at is not None:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={"code": "round_locked", "message": "This round is already locked."},
+            status=409,
+        )
+
+    if current_round.paused_at is not None:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={"code": "round_paused", "message": "This round is already paused."},
+            status=409,
+        )
+
+    try:
+        spotify_auth.pause_playback(access_token=access_token, device_id=device_id)
+    except spotify_auth.SpotifyOAuthError as exc:
+        logger.warning(
+            "Spotify pause failed for session %s on device %s: status=%s body=%r device_state=%r playback_state=%r",
+            code,
+            device_id,
+            exc.status_code,
+            exc.response_body,
+            device_state,
+            _get_host_playback_state(request, code=code),
+        )
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={
+                "code": "spotify_pause_failed",
+                "message": "Spotify playback could not be paused on the active browser device.",
+            },
+            status=502,
+        )
+
+    paused_at = timezone.now()
+    with transaction.atomic():
+        locked_session = GameSession.objects.select_for_update().get(pk=session.pk)
+        current_round = locked_session.rounds.select_for_update().order_by("-index").first()
+
+        if locked_session.status != GameSession.Status.PLAYING or current_round is None:
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "round_not_active", "message": "There is no active round to pause."},
+                status=409,
+            )
+
+        if current_round.locked_at is not None:
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "round_locked", "message": "This round is already locked."},
+                status=409,
+            )
+
+        if current_round.paused_at is not None:
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "round_paused", "message": "This round is already paused."},
+                status=409,
+            )
+
+        current_round.paused_at = paused_at
+        current_round.save(update_fields=["paused_at"])
+
+    return _round_control_success_response(
+        request,
+        code=code,
+        payload={"paused": True, **_host_round_control_payload(code=code)},
+    )
+
+
+@require_http_methods(["POST"])
+def session_resume(request, code):
+    session = _get_owned_host_session(request, code=code)
+    try:
+        access_token, device_id, device_state = _host_playback_device_for_round_control(request, code=code)
+    except spotify_auth.SpotifyOAuthError as exc:
+        logger.warning(
+            "Spotify device lookup failed before resume for session %s: status=%s body=%r",
+            code,
+            exc.status_code,
+            exc.response_body,
+        )
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={
+                "code": "spotify_device_lookup_failed",
+                "message": "Spotify browser playback could not be verified right now. Try resuming again.",
+            },
+            status=502,
+        )
+
+    if not access_token or not device_id:
+        message = "Activate the Spotify browser player before resuming the round."
+        error_code = "playback_not_ready"
+        if access_token and device_state is not None:
+            message = _playback_device_error_message(device_state)
+            error_code = "spotify_device_not_ready"
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={
+                "code": error_code,
+                "message": message,
+            },
+            status=409,
+        )
+
+    current_round = session.rounds.order_by("-index").first()
+    if session.status != GameSession.Status.PLAYING or current_round is None:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={"code": "round_not_active", "message": "There is no paused round to resume."},
+            status=409,
+        )
+
+    if current_round.locked_at is not None:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={"code": "round_locked", "message": "This round is already locked."},
+            status=409,
+        )
+
+    if current_round.paused_at is None:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={"code": "round_not_paused", "message": "This round is not paused."},
+            status=409,
+        )
+
+    try:
+        _resume_round_playback(access_token=access_token, device_id=device_id)
+    except spotify_auth.SpotifyOAuthError as exc:
+        logger.warning(
+            "Spotify resume failed for session %s on device %s: status=%s body=%r device_state=%r playback_state=%r",
+            code,
+            device_id,
+            exc.status_code,
+            exc.response_body,
+            device_state,
+            _get_host_playback_state(request, code=code),
+        )
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={
+                "code": "spotify_resume_failed",
+                "message": "Spotify playback could not resume on the active browser device.",
+            },
+            status=502,
+        )
+
+    resumed_at = timezone.now()
+    with transaction.atomic():
+        locked_session = GameSession.objects.select_for_update().get(pk=session.pk)
+        current_round = locked_session.rounds.select_for_update().order_by("-index").first()
+
+        if locked_session.status != GameSession.Status.PLAYING or current_round is None:
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "round_not_active", "message": "There is no paused round to resume."},
+                status=409,
+            )
+
+        if current_round.locked_at is not None:
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "round_locked", "message": "This round is already locked."},
+                status=409,
+            )
+
+        if current_round.paused_at is None:
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "round_not_paused", "message": "This round is not paused."},
+                status=409,
+            )
+
+        pause_duration = resumed_at - current_round.paused_at
+        if current_round.deadline_at is not None:
+            current_round.deadline_at = current_round.deadline_at + pause_duration
+        current_round.paused_at = None
+        current_round.save(update_fields=["paused_at", "deadline_at"])
+
+    return _round_control_success_response(
+        request,
+        code=code,
+        payload={"resumed": True, **_host_round_control_payload(code=code)},
+    )
+
+
+@require_http_methods(["POST"])
+def session_skip(request, code):
+    session = _get_owned_host_session(request, code=code)
+
+    with transaction.atomic():
+        locked_session = GameSession.objects.select_for_update().get(pk=session.pk)
+        current_round = locked_session.rounds.select_for_update().order_by("-index").first()
+
+        if locked_session.status != GameSession.Status.PLAYING or current_round is None:
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "round_not_active", "message": "There is no active round to skip."},
+                status=409,
+            )
+
+        if current_round.locked_at is not None:
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "round_locked", "message": "This round is already locked."},
+                status=409,
+            )
+
+        current_round.locked_at = timezone.now()
+        current_round.paused_at = None
+        current_round.save(update_fields=["locked_at", "paused_at"])
+
+    return _round_control_success_response(
+        request,
+        code=code,
+        payload={"skipped": True, **_host_round_control_payload(code=code)},
+    )
+
+
+@require_http_methods(["POST"])
+def session_restart(request, code):
+    session = _get_owned_host_session(request, code=code)
+    spotify_blocked_reason = _host_playback_block_reason(request)
+    if spotify_blocked_reason:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={
+                "code": "spotify_premium_required",
+                "message": spotify_blocked_reason,
+            },
+            status=403,
+        )
+
+    playback_state = _get_host_playback_state(request, code=code)
+    access_token = _get_host_access_token(request)
+    if not playback_state or not playback_state.get("ready") or not access_token:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={
+                "code": "playback_not_ready",
+                "message": "Activate the Spotify browser player before restarting the round.",
+            },
+            status=409,
+        )
+
+    try:
+        device_state = _resolve_start_round_playback_device(
+            access_token=access_token,
+            preferred_device_id=playback_state["device_id"],
+        )
+    except spotify_auth.SpotifyOAuthError:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={
+                "code": "spotify_device_lookup_failed",
+                "message": "Spotify browser playback could not be verified right now. Try restarting again.",
+            },
+            status=502,
+        )
+
+    if device_state is None or device_state.get("is_restricted"):
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={
+                "code": "spotify_device_not_ready",
+                "message": _playback_device_error_message(device_state),
+            },
+            status=409,
+        )
+
+    if device_state.get("id") and device_state.get("id") != playback_state["device_id"]:
+        request.session[SPOTIFY_PLAYBACK_SESSION_KEY] = {
+            **playback_state,
+            "device_id": device_state["id"],
+        }
+        playback_state = request.session[SPOTIFY_PLAYBACK_SESSION_KEY]
+
+    try:
+        with transaction.atomic():
+            locked_session = GameSession.objects.select_for_update().select_related("music_set").get(pk=session.pk)
+            current_round = locked_session.rounds.select_for_update().order_by("-index").first()
+
+            if locked_session.status != GameSession.Status.PLAYING or current_round is None:
+                return _round_control_error_response(
+                    request,
+                    code=code,
+                    error={"code": "round_not_active", "message": "There is no round to restart."},
+                    status=409,
+                )
+
+            current_round.delete()
+
+            replacement_round = _build_replacement_round(
+                locked_session,
+                access_token=access_token,
+                device_id=playback_state["device_id"],
+            )
+            if replacement_round is None:
+                return _round_control_error_response(
+                    request,
+                    code=code,
+                    error={
+                        "code": "round_restart_unavailable",
+                        "message": "A replacement round could not be created for this music set.",
+                    },
+                    status=409,
+                )
+    except spotify_auth.SpotifyOAuthError as exc:
+        if exc.status_code == 409:
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={
+                    "code": "spotify_device_not_active",
+                    "message": str(exc),
+                },
+                status=409,
+            )
+
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={
+                "code": "spotify_playback_failed",
+                "message": "Spotify playback could not restart on the active browser device.",
+            },
+            status=502,
+        )
+
+    return _round_control_success_response(
+        request,
+        code=code,
+        payload={
+            "playback": {
+                "device_id": playback_state["device_id"],
+                "spotify_track_id": replacement_round.track.spotify_track_id,
+                "offset_ms": replacement_round.offset_ms,
+            },
+            **_host_round_control_payload(code=code),
+        },
     )
 
 

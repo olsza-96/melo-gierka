@@ -7,10 +7,22 @@
   <main class="lobby-grid">
     <section class="panel lobby-hero">
       <p class="eyebrow">player round</p>
-      <h1>Round {{ current_round.index }} is live.</h1>
-      <p class="panel-copy">
-        Pick the correct artist from the four options below. Your first click locks in your answer.
-      </p>
+      {% if current_round.locked_at %}
+        <h1>Round {{ current_round.index }} results.</h1>
+        <p class="panel-copy">
+          The answer is revealed below together with the current session scores.
+        </p>
+      {% elif current_round.paused_at %}
+        <h1>Round {{ current_round.index }} is paused.</h1>
+        <p class="panel-copy">
+          The host has paused playback. Your answer stays locked until the round resumes or ends.
+        </p>
+      {% else %}
+        <h1>Round {{ current_round.index }} is live.</h1>
+        <p class="panel-copy">
+          Pick the correct artist from the four options below. Your first click locks in your answer.
+        </p>
+      {% endif %}
 
       <div class="session-code-card" aria-label="Session code">
         <span class="session-code-label">Session code</span>
@@ -32,30 +44,42 @@
       <h2 data-round-heading>Choose the artist</h2>
       {% if current_round.locked_at %}
         <p class="panel-copy" data-round-status>Round locked.</p>
+      {% elif current_round.paused_at %}
+        <p class="panel-copy" data-round-status>Round paused.</p>
       {% elif viewer_answer %}
         <p class="panel-copy" data-round-status>Your answer is locked.</p>
       {% else %}
         <p class="panel-copy" data-round-status>Round {{ current_round.index }} is live. Pick once.</p>
       {% endif %}
       <p class="playback-status" data-round-countdown></p>
-      <div class="playback-actions" data-answer-options{% if current_round.locked_at or viewer_answer %} hidden{% endif %}>
+      <div class="playback-actions" data-answer-options{% if current_round.locked_at or current_round.paused_at or viewer_answer %} hidden{% endif %}>
         {% for option in current_round.answer_options %}
           <button class="button button-secondary" type="button" data-answer-option value="{{ option }}">{{ option }}</button>
         {% endfor %}
       </div>
-      <p class="panel-copy" data-viewer-answer{% if not current_round.locked_at and not viewer_answer %} hidden{% endif %}>
+      <p class="panel-copy" data-viewer-answer{% if not current_round.locked_at and not current_round.paused_at and not viewer_answer %} hidden{% endif %}>
         {% if current_round.locked_at and current_round.track %}
           {% if viewer_answer %}
             Your answer: {{ viewer_answer.selected_artist }}. Correct artist: {{ current_round.track.artist }}.
           {% else %}
             Correct artist: {{ current_round.track.artist }}.
           {% endif %}
+        {% elif current_round.paused_at and viewer_answer %}
+          Answer locked: {{ viewer_answer.selected_artist }}. Waiting for the round to resume or finish.
+        {% elif current_round.paused_at %}
+          The host paused the round. Wait for it to resume.
         {% elif viewer_answer %}
           Answer locked: {{ viewer_answer.selected_artist }}. Waiting for the round to close.
         {% endif %}
       </p>
+
+      <section class="panel" data-round-results{% if not current_round.locked_at %} hidden{% endif %}>
+        <p class="eyebrow">results</p>
+        <h3>Scores</h3>
+        <ul class="player-roster" data-score-list></ul>
+      </section>
     </section>
   </main>
 
-  <script src="{% static 'game/round.js' %}?v=20260605b" defer></script>
+  <script src="{% static 'game/round.js' %}?v=20260605m" defer></script>
 {% endblock %}

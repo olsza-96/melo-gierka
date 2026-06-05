@@ -370,12 +370,12 @@ This slice introduces real gameplay persistence. Expect a schema migration for t
 
 #### Automated
 
-- [ ] 3.1 Host control tests pass for pause, resume, skip, and restart: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "pause or resume or skip or restart"`
-- [ ] 3.2 The full slice regression suite passes after the round-end state lands: `DJANGO_DEBUG=True uv run pytest catalog/tests.py tests/test_smoke.py game/tests.py`
+- [x] 3.1 Host control tests pass for pause, resume, skip, and restart: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "pause or resume or skip or restart"`
+- [x] 3.2 The full slice regression suite passes after the round-end state lands: `DJANGO_DEBUG=True uv run pytest catalog/tests.py tests/test_smoke.py game/tests.py`
 
 #### Manual
 
-- [ ] 3.3 Pause freezes playback and the countdown for all connected clients, and resume continues the same round.
+- [x] 3.3 Pause freezes playback and the countdown for all connected clients, and resume continues the same round.
 - [ ] 3.4 Skip reveals the round result immediately, while restart discards the current round and creates a fresh replacement with cleared answers.
 - [ ] 3.5 Correct artist and updated scores appear only after lock or skip, not immediately when a player answers.
 

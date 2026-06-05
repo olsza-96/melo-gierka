@@ -29,6 +29,8 @@ def get_session_state(code: str, *, viewer_player_id: int | None = None) -> tupl
         return None
 
     current_round = session.rounds.first()
+    players = list(session.players.all())
+    players_snapshot = _serialize_players(players, current_round=current_round)
 
     snapshot = {
         "code": session.code,
@@ -39,17 +41,10 @@ def get_session_state(code: str, *, viewer_player_id: int | None = None) -> tupl
         },
         "started_at": session.started_at,
         "finished_at": session.finished_at,
-        "players": [
-            {
-                "name": player.name,
-                "score": player.score,
-                "joined_at": player.joined_at,
-            }
-            for player in session.players.all()
-        ],
+        "players": players_snapshot,
         "current_round": _serialize_round(
             current_round,
-            total_players=len(session.players.all()),
+            total_players=len(players),
             viewer_player_id=viewer_player_id,
         ),
     }
@@ -69,6 +64,26 @@ def build_snapshot_etag(snapshot: dict) -> str:
     payload = json.dumps(snapshot, sort_keys=True, cls=DjangoJSONEncoder)
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
     return f'"{digest}"'
+
+
+def _serialize_players(players: list[Player], *, current_round: Round | None) -> list[dict]:
+    hidden_score_by_player_id = {}
+    if current_round is not None and current_round.locked_at is None:
+        hidden_score_by_player_id = {
+            answer.player_id: answer.points_awarded
+            for answer in current_round.answers.all()
+        }
+
+    payload = [
+        {
+            "name": player.name,
+            "score": player.score - hidden_score_by_player_id.get(player.pk, 0),
+            "joined_at": player.joined_at,
+        }
+        for player in players
+    ]
+    payload.sort(key=lambda player: (-player["score"], player["joined_at"]))
+    return payload
 
 
 def _serialize_round(

@@ -16,6 +16,7 @@ SPOTIFY_TRACK_URL = "https://api.spotify.com/v1/tracks/{track_id}"
 SPOTIFY_AVAILABLE_DEVICES_URL = "https://api.spotify.com/v1/me/player/devices"
 SPOTIFY_TRANSFER_PLAYBACK_URL = "https://api.spotify.com/v1/me/player"
 SPOTIFY_START_PLAYBACK_URL = "https://api.spotify.com/v1/me/player/play"
+SPOTIFY_PAUSE_PLAYBACK_URL = "https://api.spotify.com/v1/me/player/pause"
 PKCE_ALLOWED_CHARS = string.ascii_letters + string.digits + "-._~"
 
 
@@ -223,3 +224,35 @@ def transfer_playback(*, access_token: str, device_id: str, play: bool = False) 
         response.raise_for_status()
     except httpx.HTTPError as exc:
         raise _build_spotify_error("Spotify playback transfer failed.", exc) from exc
+
+
+def pause_playback(*, access_token: str, device_id: str) -> None:
+    try:
+        response = httpx.put(
+            SPOTIFY_PAUSE_PLAYBACK_URL,
+            params={"device_id": device_id},
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+            timeout=10.0,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _build_spotify_error("Spotify playback pause failed.", exc) from exc
+
+
+def resume_playback(*, access_token: str, device_id: str) -> None:
+    try:
+        response = httpx.put(
+            SPOTIFY_START_PLAYBACK_URL,
+            params={"device_id": device_id},
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+            timeout=10.0,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _build_spotify_error("Spotify playback resume failed.", exc) from exc

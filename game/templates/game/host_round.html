@@ -7,10 +7,22 @@
   <main class="lobby-grid">
     <section class="panel lobby-hero">
       <p class="eyebrow">host round</p>
-      <h1>Round {{ current_round.index }} is live.</h1>
-      <p class="panel-copy">
-        Spotify playback has been started for this session. Keep this screen open while the players answer from their phones.
-      </p>
+      {% if current_round.locked_at %}
+        <h1>Round {{ current_round.index }} results.</h1>
+        <p class="panel-copy">
+          The round is complete. Review the result state or restart the round from this screen.
+        </p>
+      {% elif current_round.paused_at %}
+        <h1>Round {{ current_round.index }} is paused.</h1>
+        <p class="panel-copy">
+          Playback and countdown are frozen until you resume, skip, or restart this round.
+        </p>
+      {% else %}
+        <h1>Round {{ current_round.index }} is live.</h1>
+        <p class="panel-copy">
+          Spotify playback has been started for this session. Keep this screen open while the players answer from their phones.
+        </p>
+      {% endif %}
 
       <div class="session-code-card" aria-label="Session code">
         <span class="session-code-label">Session code</span>
@@ -29,6 +41,10 @@
       data-auto-connect="true"
       data-round-state-root
       data-state-url="{% url 'game:session-state' code=host_session.code %}"
+      data-pause-url="{{ session_pause_url }}"
+      data-resume-url="{{ session_resume_url }}"
+      data-skip-url="{{ session_skip_url }}"
+      data-restart-url="{{ session_restart_url }}"
     >
       <div hidden>{% csrf_token %}</div>
       <p class="eyebrow">playback status</p>
@@ -36,9 +52,52 @@
       <p class="panel-copy">
         This browser remains the active Spotify device for the current round. If it reconnects, the ready state is written back to the same host session.
       </p>
-      <p class="panel-copy" data-round-status>Round {{ current_round.index }} is live.</p>
+      {% if current_round.locked_at %}
+        <p class="panel-copy" data-round-status>Round locked.</p>
+      {% elif current_round.paused_at %}
+        <p class="panel-copy" data-round-status>Round paused.</p>
+      {% else %}
+        <p class="panel-copy" data-round-status>Round {{ current_round.index }} is live.</p>
+      {% endif %}
       <p class="playback-status" data-round-countdown>Connecting to Spotify browser playback…</p>
       <p class="playback-status" data-playback-status>Connecting to Spotify browser playback…</p>
+
+      <form id="host-round-control-form" method="post" hidden>
+        {% csrf_token %}
+      </form>
+      <div class="playback-actions" data-round-controls>
+        <button
+          class="button button-secondary"
+          type="submit"
+          form="host-round-control-form"
+          formaction="{{ session_pause_url }}"
+          data-round-control="pause"
+          {% if current_round.paused_at or current_round.locked_at %}hidden disabled{% endif %}
+        >Pause</button>
+        <button
+          class="button button-secondary"
+          type="submit"
+          form="host-round-control-form"
+          formaction="{{ session_resume_url }}"
+          data-round-control="resume"
+          {% if not current_round.paused_at or current_round.locked_at %}hidden disabled{% endif %}
+        >Resume</button>
+        <button
+          class="button button-secondary"
+          type="submit"
+          form="host-round-control-form"
+          formaction="{{ session_skip_url }}"
+          data-round-control="skip"
+          {% if current_round.locked_at %}hidden disabled{% endif %}
+        >Skip</button>
+        <button
+          class="button button-secondary"
+          type="submit"
+          form="host-round-control-form"
+          formaction="{{ session_restart_url }}"
+          data-round-control="restart"
+        >Restart</button>
+      </div>
 
       <div class="playback-metadata">
         <p><strong>Track id:</strong> {{ current_round.track.spotify_track_id }}</p>
@@ -51,9 +110,15 @@
         </div>
         <p class="panel-copy" data-viewer-answer hidden></p>
       </div>
+
+      <section class="panel" data-round-results{% if not current_round.locked_at %} hidden{% endif %}>
+        <p class="eyebrow">results</p>
+        <h3>Scores</h3>
+        <ul class="player-roster" data-score-list></ul>
+      </section>
     </section>
   </main>
 
-  <script src="{% static 'game/spotify_player.js' %}?v=20260605b" defer></script>
-  <script src="{% static 'game/round.js' %}?v=20260605b" defer></script>
+  <script src="{% static 'game/spotify_player.js' %}?v=20260605m" defer></script>
+  <script src="{% static 'game/round.js' %}?v=20260605m" defer></script>
 {% endblock %}
