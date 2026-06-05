@@ -19,6 +19,29 @@
 
       <p class="lobby-status">Waiting for players to join.</p>
       <a class="text-link" href="{{ spotify_logout_url }}">Change Spotify account</a>
+
+      <section
+        class="playback-card"
+        data-spotify-player-root
+        data-access-token="{{ spotify_access_token }}"
+        data-blocked-reason="{{ spotify_blocked_reason }}"
+        data-diagnostics-url="{% url 'game:session-playback-diagnostics' code=host_session.code %}"
+        data-ready-url="{{ spotify_playback_ready_url }}"
+        data-start-url="{{ session_start_round_url }}"
+      >
+        <p class="eyebrow">playback readiness</p>
+        <h2>Prepare Spotify on this browser</h2>
+        <p class="panel-copy">
+          Activate the Spotify browser player first. Once this browser is ready, you can start round 1 from this same screen.
+        </p>
+        <p class="playback-status" data-playback-status>Spotify browser player not ready yet.</p>
+        <div class="playback-actions">
+          <button class="button button-secondary" type="button" data-playback-prepare>Prepare Spotify player</button>
+          <button class="button button-primary" type="button" data-start-round>Start round 1</button>
+          <button class="button button-secondary" type="button" data-playback-diagnostics>Run diagnostics</button>
+        </div>
+        <pre class="playback-diagnostics" data-playback-diagnostics-output hidden></pre>
+      </section>
     </section>
 
     <section class="panel lobby-panel">
@@ -67,4 +90,5 @@
   </main>
 
   <script src="{% static 'game/lobby.js' %}" defer></script>
+  <script src="{% static 'game/spotify_player.js' %}" defer></script>
 {% endblock %}

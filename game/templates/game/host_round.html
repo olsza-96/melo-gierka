@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}melo-gierka | round {{ current_round.index }}{% endblock %}
+
+{% block content %}
+  <main class="lobby-grid">
+    <section class="panel lobby-hero">
+      <p class="eyebrow">host round</p>
+      <h1>Round {{ current_round.index }} is live.</h1>
+      <p class="panel-copy">
+        Spotify playback has been started for this session. Keep this screen open while the players answer from their phones.
+      </p>
+
+      <div class="session-code-card" aria-label="Session code">
+        <span class="session-code-label">Session code</span>
+        <strong class="session-code-value">{{ host_session.code }}</strong>
+      </div>
+
+      <p class="lobby-status">Round 1 is running for {{ host_session.music_set.name }}.</p>
+    </section>
+
+    <section
+      class="panel playback-card"
+      data-spotify-player-root
+      data-access-token="{{ spotify_access_token }}"
+      data-blocked-reason="{{ spotify_blocked_reason }}"
+      data-ready-url="{{ spotify_playback_ready_url }}"
+      data-auto-connect="true"
+    >
+      <div hidden>{% csrf_token %}</div>
+      <p class="eyebrow">playback status</p>
+      <h2>Spotify browser player</h2>
+      <p class="panel-copy">
+        This browser remains the active Spotify device for the current round. If it reconnects, the ready state is written back to the same host session.
+      </p>
+      <p class="playback-status" data-playback-status>Connecting to Spotify browser playback…</p>
+
+      <div class="playback-metadata">
+        <p><strong>Track id:</strong> {{ current_round.track.spotify_track_id }}</p>
+        <p><strong>Offset:</strong> {{ current_round.offset_ms }} ms</p>
+        <p><strong>Answer options:</strong> {{ current_round.answer_options|join:", " }}</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="{% static 'game/spotify_player.js' %}" defer></script>
+{% endblock %}

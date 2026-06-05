@@ -66,7 +66,10 @@ class Round(models.Model):
         on_delete=models.PROTECT,
     )
     offset_ms = models.PositiveIntegerField()
+    answer_options = models.JSONField(default=list)
     started_at = models.DateTimeField()
+    deadline_at = models.DateTimeField(null=True, blank=True)
+    paused_at = models.DateTimeField(null=True, blank=True)
     locked_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
@@ -84,3 +87,33 @@ class Round(models.Model):
 
     def __str__(self) -> str:
         return f"Round {self.index} of {self.session.code}"
+
+
+class Answer(models.Model):
+    round = models.ForeignKey(
+        Round,
+        related_name="answers",
+        on_delete=models.CASCADE,
+    )
+    player = models.ForeignKey(
+        Player,
+        related_name="answers",
+        on_delete=models.CASCADE,
+    )
+    selected_artist = models.CharField(max_length=200)
+    submitted_at = models.DateTimeField(default=timezone.now)
+    response_ms = models.PositiveIntegerField(default=0)
+    is_correct = models.BooleanField(default=False)
+    points_awarded = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["round", "player"],
+                name="unique_answer_per_round_player",
+            ),
+        ]
+        ordering = ["round", "submitted_at", "player"]
+
+    def __str__(self) -> str:
+        return f"{self.player.name} -> {self.round}"
