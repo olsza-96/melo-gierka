@@ -1005,6 +1005,59 @@ def test_restart_round_replaces_current_round_and_clears_answers(client, session
     assert Answer.objects.filter(round=current_round).count() == 0
 
 
+@pytest.mark.django_db(transaction=True)
+def test_restart_round_calls_spotify_outside_database_transaction(client, session, track):
+    for index in range(1, 5):
+        Track.objects.create(
+            music_set=session.music_set,
+            spotify_track_id=f"replacement-{index}",
+            artist=f"Artist {index}",
+            title=f"Replacement {index}",
+            duration_ms=180_000,
+        )
+
+    Player.objects.create(session=session, name="Adam")
+    _set_host_auth(client)
+    _bind_host_session(client, session)
+    _set_playback_ready(client, session, device_id="device-42")
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now() - timedelta(seconds=10)
+    session.save(update_fields=["status", "started_at"])
+    Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now() - timedelta(seconds=10),
+        deadline_at=timezone.now() + timedelta(seconds=20),
+    )
+
+    def assert_fetch_not_in_transaction(*, spotify_track_id, **_kwargs):
+        assert not connection.in_atomic_block
+        return {
+            "spotify_track_id": spotify_track_id,
+            "is_playable": True,
+            "restriction_reason": None,
+        }
+
+    def assert_start_not_in_transaction(**_kwargs):
+        assert not connection.in_atomic_block
+
+    with mock.patch(
+        "game.views._resolve_start_round_playback_device",
+        return_value={"id": "device-42", "is_restricted": False},
+    ), mock.patch("game.views.spotify_auth.fetch_track_details", side_effect=assert_fetch_not_in_transaction), mock.patch(
+        "game.views._start_round_playback", side_effect=assert_start_not_in_transaction
+    ):
+        response = client.post(
+            reverse("game:session-restart", kwargs={"code": session.code}),
+            HTTP_X_REQUESTED_WITH="fetch",
+        )
+
+    assert response.status_code == 200
+
+
 @pytest.mark.django_db
 def test_pause_resume_pause_sequence_keeps_round_pauseable(client, session, track):
     _set_host_auth(client)
@@ -1301,6 +1354,44 @@ def test_start_round_creates_round_and_returns_host_playback_bootstrap(client, s
         spotify_track_id=created_round.track.spotify_track_id,
         position_ms=created_round.offset_ms,
     )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_start_round_calls_spotify_outside_database_transaction(client, session):
+    for index in range(1, 5):
+        Track.objects.create(
+            music_set=session.music_set,
+            spotify_track_id=f"track-{index}",
+            artist=f"Artist {index}",
+            title=f"Title {index}",
+            duration_ms=180_000,
+        )
+
+    Player.objects.create(session=session, name="Adam")
+    _set_host_auth(client)
+    _bind_host_session(client, session)
+    _set_playback_ready(client, session, device_id="device-42")
+
+    def assert_fetch_not_in_transaction(*, spotify_track_id, **_kwargs):
+        assert not connection.in_atomic_block
+        return {
+            "spotify_track_id": spotify_track_id,
+            "is_playable": True,
+            "restriction_reason": None,
+        }
+
+    def assert_start_not_in_transaction(**_kwargs):
+        assert not connection.in_atomic_block
+
+    with mock.patch(
+        "game.views._resolve_start_round_playback_device",
+        return_value={"id": "device-42", "is_restricted": False},
+    ), mock.patch("game.views.spotify_auth.fetch_track_details", side_effect=assert_fetch_not_in_transaction), mock.patch(
+        "game.views._start_round_playback", side_effect=assert_start_not_in_transaction
+    ):
+        response = client.post(reverse("game:session-start-round", kwargs={"code": session.code}))
+
+    assert response.status_code == 200
 
 
 @pytest.mark.django_db

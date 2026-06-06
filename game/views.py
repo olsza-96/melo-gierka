@@ -303,12 +303,11 @@ def _host_playback_device_for_round_control(request, *, code: str):
     return access_token, playback_state.get("device_id"), device_state
 
 
-def _build_replacement_round(
+def _build_round_candidate(
     session: GameSession,
     *,
     access_token: str,
-    device_id: str,
-) -> Round | None:
+) -> dict | None:
     track = _choose_round_track(session, access_token=access_token)
     if track is None:
         return None
@@ -319,23 +318,13 @@ def _build_replacement_round(
 
     started_at = timezone.now()
     offset_ms = _build_round_offset_ms(track.duration_ms)
-    round_obj = Round.objects.create(
-        session=session,
-        index=1,
-        track=track,
-        offset_ms=offset_ms,
-        answer_options=answer_options,
-        started_at=started_at,
-        deadline_at=started_at + timedelta(milliseconds=ROUND_DURATION_MS),
-    )
-
-    _start_round_playback(
-        access_token=access_token,
-        device_id=device_id,
-        spotify_track_id=track.spotify_track_id,
-        position_ms=offset_ms,
-    )
-    return round_obj
+    return {
+        "track": track,
+        "offset_ms": offset_ms,
+        "answer_options": answer_options,
+        "started_at": started_at,
+        "deadline_at": started_at + timedelta(milliseconds=ROUND_DURATION_MS),
+    }
 
 
 def _round_response_ms(round_obj: Round, *, answered_at) -> int:
@@ -1544,36 +1533,42 @@ def session_restart(request, code):
         }
         playback_state = request.session[SPOTIFY_PLAYBACK_SESSION_KEY]
 
-    try:
-        with transaction.atomic():
-            locked_session = GameSession.objects.select_for_update().select_related("music_set").get(pk=session.pk)
-            current_round = locked_session.rounds.select_for_update().order_by("-index").first()
+    with transaction.atomic():
+        locked_session = GameSession.objects.select_for_update().select_related("music_set").get(pk=session.pk)
+        current_round = locked_session.rounds.select_for_update().order_by("-index").first()
 
-            if locked_session.status != GameSession.Status.PLAYING or current_round is None:
-                return _round_control_error_response(
-                    request,
-                    code=code,
-                    error={"code": "round_not_active", "message": "There is no round to restart."},
-                    status=409,
-                )
-
-            current_round.delete()
-
-            replacement_round = _build_replacement_round(
-                locked_session,
-                access_token=access_token,
-                device_id=playback_state["device_id"],
+        if locked_session.status != GameSession.Status.PLAYING or current_round is None:
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "round_not_active", "message": "There is no round to restart."},
+                status=409,
             )
-            if replacement_round is None:
-                return _round_control_error_response(
-                    request,
-                    code=code,
-                    error={
-                        "code": "round_restart_unavailable",
-                        "message": "A replacement round could not be created for this music set.",
-                    },
-                    status=409,
-                )
+
+        current_round_id = current_round.pk
+
+    replacement_candidate = _build_round_candidate(
+        session,
+        access_token=access_token,
+    )
+    if replacement_candidate is None:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={
+                "code": "round_restart_unavailable",
+                "message": "A replacement round could not be created for this music set.",
+            },
+            status=409,
+        )
+
+    try:
+        _start_round_playback(
+            access_token=access_token,
+            device_id=playback_state["device_id"],
+            spotify_track_id=replacement_candidate["track"].spotify_track_id,
+            position_ms=replacement_candidate["offset_ms"],
+        )
     except spotify_auth.SpotifyOAuthError as exc:
         if exc.status_code == 409:
             return _round_control_error_response(
@@ -1594,6 +1589,33 @@ def session_restart(request, code):
                 "message": "Spotify playback could not restart on the active browser device.",
             },
             status=502,
+        )
+
+    with transaction.atomic():
+        locked_session = GameSession.objects.select_for_update().select_related("music_set").get(pk=session.pk)
+        current_round = locked_session.rounds.select_for_update().order_by("-index").first()
+
+        if (
+            locked_session.status != GameSession.Status.PLAYING
+            or current_round is None
+            or current_round.pk != current_round_id
+        ):
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "round_not_active", "message": "There is no round to restart."},
+                status=409,
+            )
+
+        current_round.delete()
+        replacement_round = Round.objects.create(
+            session=locked_session,
+            index=1,
+            track=replacement_candidate["track"],
+            offset_ms=replacement_candidate["offset_ms"],
+            answer_options=replacement_candidate["answer_options"],
+            started_at=replacement_candidate["started_at"],
+            deadline_at=replacement_candidate["deadline_at"],
         )
 
     return _round_control_success_response(
@@ -1756,89 +1778,66 @@ def session_start_round(request, code):
         }
         playback_state = request.session[SPOTIFY_PLAYBACK_SESSION_KEY]
 
+    with transaction.atomic():
+        locked_session = GameSession.objects.select_for_update().select_related(
+            "music_set"
+        ).get(pk=session.pk)
+
+        if locked_session.status != GameSession.Status.LOBBY:
+            return JsonResponse(
+                {
+                    "error": {
+                        "code": "session_not_in_lobby",
+                        "message": "This session has already left the lobby.",
+                    }
+                },
+                status=409,
+            )
+
+        if locked_session.players.count() == 0:
+            return JsonResponse(
+                {
+                    "error": {
+                        "code": "players_required",
+                        "message": "At least one joined player is required before starting the round.",
+                    }
+                },
+                status=409,
+            )
+
+    round_candidate = _build_round_candidate(
+        session,
+        access_token=access_token,
+    )
+    if round_candidate is None:
+        available_artists = session.music_set.tracks.values_list("artist", flat=True).distinct().count()
+        if available_artists < 4:
+            return JsonResponse(
+                {
+                    "error": {
+                        "code": "insufficient_artists",
+                        "message": "This music set needs at least four distinct artists for a round.",
+                    }
+                },
+                status=409,
+            )
+        return JsonResponse(
+            {
+                "error": {
+                    "code": "no_playable_tracks",
+                    "message": "No playable Spotify tracks are available for this host account in the selected music set.",
+                }
+            },
+            status=409,
+        )
+
     try:
-        with transaction.atomic():
-            locked_session = GameSession.objects.select_for_update().select_related(
-                "music_set"
-            ).get(pk=session.pk)
-
-            if locked_session.status != GameSession.Status.LOBBY:
-                return JsonResponse(
-                    {
-                        "error": {
-                            "code": "session_not_in_lobby",
-                            "message": "This session has already left the lobby.",
-                        }
-                    },
-                    status=409,
-                )
-
-            if locked_session.players.count() == 0:
-                return JsonResponse(
-                    {
-                        "error": {
-                            "code": "players_required",
-                            "message": "At least one joined player is required before starting the round.",
-                        }
-                    },
-                    status=409,
-                )
-
-            track = _choose_round_track(
-                locked_session,
-                access_token=access_token,
-            )
-            if track is None:
-                return JsonResponse(
-                    {
-                        "error": {
-                            "code": "no_playable_tracks",
-                            "message": "No playable Spotify tracks are available for this host account in the selected music set.",
-                        }
-                    },
-                    status=409,
-                )
-
-            answer_options = _build_answer_options(
-                locked_session,
-                correct_artist=track.artist,
-            )
-            if answer_options is None:
-                return JsonResponse(
-                    {
-                        "error": {
-                            "code": "insufficient_artists",
-                            "message": "This music set needs at least four distinct artists for a round.",
-                        }
-                    },
-                    status=409,
-                )
-
-            started_at = timezone.now()
-            offset_ms = _build_round_offset_ms(track.duration_ms)
-            round_obj = Round.objects.create(
-                session=locked_session,
-                index=locked_session.rounds.count() + 1,
-                track=track,
-                offset_ms=offset_ms,
-                answer_options=answer_options,
-                started_at=started_at,
-                deadline_at=started_at + timedelta(milliseconds=ROUND_DURATION_MS),
-            )
-
-            _start_round_playback(
-                access_token=access_token,
-                device_id=playback_state["device_id"],
-                spotify_track_id=track.spotify_track_id,
-                position_ms=offset_ms,
-            )
-
-            locked_session.status = GameSession.Status.PLAYING
-            if locked_session.started_at is None:
-                locked_session.started_at = started_at
-                locked_session.save(update_fields=["status", "started_at"])
-            else:
-                locked_session.save(update_fields=["status"])
+        _start_round_playback(
+            access_token=access_token,
+            device_id=playback_state["device_id"],
+            spotify_track_id=round_candidate["track"].spotify_track_id,
+            position_ms=round_candidate["offset_ms"],
+        )
     except spotify_auth.SpotifyOAuthError as exc:
         if exc.status_code == 409:
             return JsonResponse(
@@ -1866,6 +1865,50 @@ def session_start_round(request, code):
             },
             status=502,
         )
+
+    with transaction.atomic():
+        locked_session = GameSession.objects.select_for_update().select_related(
+            "music_set"
+        ).get(pk=session.pk)
+
+        if locked_session.status != GameSession.Status.LOBBY:
+            return JsonResponse(
+                {
+                    "error": {
+                        "code": "session_not_in_lobby",
+                        "message": "This session has already left the lobby.",
+                    }
+                },
+                status=409,
+            )
+
+        if locked_session.players.count() == 0:
+            return JsonResponse(
+                {
+                    "error": {
+                        "code": "players_required",
+                        "message": "At least one joined player is required before starting the round.",
+                    }
+                },
+                status=409,
+            )
+
+        round_obj = Round.objects.create(
+            session=locked_session,
+            index=locked_session.rounds.count() + 1,
+            track=round_candidate["track"],
+            offset_ms=round_candidate["offset_ms"],
+            answer_options=round_candidate["answer_options"],
+            started_at=round_candidate["started_at"],
+            deadline_at=round_candidate["deadline_at"],
+        )
+
+        locked_session.status = GameSession.Status.PLAYING
+        if locked_session.started_at is None:
+            locked_session.started_at = round_candidate["started_at"]
+            locked_session.save(update_fields=["status", "started_at"])
+        else:
+            locked_session.save(update_fields=["status"])
 
     return JsonResponse(
         {
