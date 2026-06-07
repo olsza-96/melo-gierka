@@ -68,6 +68,7 @@
         class="roster-card"
         data-lobby-state-root
         data-state-url="{% url 'game:session-state' code=host_session.code %}"
+        data-results-url="{{ host_results_url }}"
         data-empty-label="No players yet."
       >
         <div class="roster-header">
@@ -89,6 +90,6 @@
     </section>
   </main>
 
-  <script src="{% static 'game/lobby.js' %}" defer></script>
-  <script src="{% static 'game/spotify_player.js' %}" defer></script>
+  <script src="{% static 'game/lobby.js' %}?v=20260607a" defer></script>
+  <script src="{% static 'game/spotify_player.js' %}?v=20260607c" defer></script>
 {% endblock %}

@@ -208,6 +208,15 @@
     });
   }
 
+  function transitionToResults(root, snapshot) {
+    if (!snapshot || snapshot.status !== "finished" || !root.dataset.resultsUrl) {
+      return false;
+    }
+
+    window.location.assign(root.dataset.resultsUrl);
+    return true;
+  }
+
   function pauseHostPlaybackForLockedRound(root, roundBody) {
     if (!root.hasAttribute("data-spotify-player-root") || !roundBody || roundBody.phase !== "locked") {
       return;
@@ -363,6 +372,9 @@
       const snapshot = await response.json();
       snapshot._receivedAtMs = Date.now();
       setLatestSnapshot(snapshot);
+      if (transitionToResults(root, snapshot)) {
+        return;
+      }
       renderSnapshot(root, snapshot);
     }
 

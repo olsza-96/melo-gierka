@@ -10,7 +10,9 @@ urlpatterns = [
     path("oauth/spotify/logout", views.spotify_logout, name="spotify-logout"),
     path("player/join", views.player_join, name="player-join"),
     path("player/sessions/<str:code>", views.player_lobby, name="player-lobby"),
+    path("player/sessions/<str:code>/results", views.player_results, name="player-results"),
     path("host/sessions/create", views.session_create, name="session-create"),
     path("host/sessions/<str:code>", views.host_lobby, name="host-lobby"),
+    path("host/sessions/<str:code>/results", views.host_results, name="host-results"),
     path("host/sessions/<str:code>/music-set", views.music_set_edit, name="music-set-edit"),
 ]

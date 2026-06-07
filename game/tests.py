@@ -806,9 +806,10 @@ def test_host_lobby_branches_to_round_surface_with_shared_state_hooks(client, se
     assert reverse("game:session-restart", kwargs={"code": session.code}) in content
     assert reverse("game:session-next-round", kwargs={"code": session.code}) in content
     assert reverse("game:session-stop-playback", kwargs={"code": session.code}) in content
+    assert reverse("game_host:host-results", kwargs={"code": session.code}) in content
     assert reverse("game:session-state", kwargs={"code": session.code}) in content
     assert "Round 1 is live." in content
-    assert "round.js?v=20260607c" in content
+    assert "round.js?v=20260607d" in content
 
 
 @pytest.mark.django_db
@@ -838,7 +839,67 @@ def test_host_round_locked_surface_renders_complete_countdown(client, session, t
     assert "Start next round" in content
     assert reverse("game:session-next-round", kwargs={"code": session.code}) in content
     assert reverse("game:session-stop-playback", kwargs={"code": session.code}) in content
-    assert "round.js?v=20260607c" in content
+    assert reverse("game_host:host-results", kwargs={"code": session.code}) in content
+    assert "round.js?v=20260607d" in content
+
+
+@pytest.mark.django_db
+def test_host_lobby_redirects_finished_session_to_host_results(client, session):
+    _bind_host_session(client, session)
+    session.status = GameSession.Status.FINISHED
+    session.finished_at = timezone.now()
+    session.save(update_fields=["status", "finished_at"])
+
+    response = client.get(reverse("game_host:host-lobby", kwargs={"code": session.code}))
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == reverse("game_host:host-results", kwargs={"code": session.code})
+
+
+@pytest.mark.django_db
+def test_host_results_renders_co_winners_and_full_ranking(client, session):
+    _bind_host_session(client, session)
+    Player.objects.create(session=session, name="Adam", score=900)
+    Player.objects.create(session=session, name="Beata", score=900)
+    Player.objects.create(session=session, name="Celina", score=400)
+    session.status = GameSession.Status.FINISHED
+    session.finished_at = timezone.now()
+    session.save(update_fields=["status", "finished_at"])
+
+    response = client.get(reverse("game_host:host-results", kwargs={"code": session.code}))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "Co-winners" in content
+    assert "Adam" in content
+    assert "Beata" in content
+    assert "Celina" in content
+    assert "900 pts" in content
+    assert "400 pts" in content
+    assert "Start next round" not in content
+
+
+@pytest.mark.django_db
+def test_host_results_redirects_non_finished_session(client, session):
+    _bind_host_session(client, session)
+
+    response = client.get(reverse("game_host:host-results", kwargs={"code": session.code}))
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == reverse("game_host:host-lobby", kwargs={"code": session.code})
+
+
+@pytest.mark.django_db
+def test_host_results_owner_guard_blocks_other_browser(client, session):
+    _bind_host_session(client, session)
+    session.status = GameSession.Status.FINISHED
+    session.finished_at = timezone.now()
+    session.save(update_fields=["status", "finished_at"])
+
+    other_client = client.__class__()
+    response = other_client.get(reverse("game_host:host-results", kwargs={"code": session.code}))
+
+    assert response.status_code == 404
 
 
 @pytest.mark.django_db
@@ -2434,8 +2495,81 @@ def test_player_lobby_branches_to_round_surface_for_bound_player(client, session
     assert "data-round-state-root" in content
     assert reverse("game:session-state", kwargs={"code": session.code}) in content
     assert reverse("game:session-answer", kwargs={"code": session.code}) in content
+    assert reverse("game_host:player-results", kwargs={"code": session.code}) in content
     assert "You are in the lobby." not in content
     assert response.headers["Cache-Control"] == "no-store"
+
+
+@pytest.mark.django_db
+def test_player_lobby_renders_results_link_for_lobby_polling(client, session):
+    joined_player = Player.objects.create(session=session, name="Adam")
+    _bind_player_session(client, session, joined_player)
+
+    response = client.get(reverse("game_host:player-lobby", kwargs={"code": session.code}))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert reverse("game_host:player-results", kwargs={"code": session.code}) in content
+    assert "lobby.js?v=20260607a" in content
+
+
+@pytest.mark.django_db
+def test_player_lobby_redirects_finished_session_to_player_results(client, session):
+    joined_player = Player.objects.create(session=session, name="Adam")
+    _bind_player_session(client, session, joined_player)
+    session.status = GameSession.Status.FINISHED
+    session.finished_at = timezone.now()
+    session.save(update_fields=["status", "finished_at"])
+
+    response = client.get(reverse("game_host:player-lobby", kwargs={"code": session.code}))
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == reverse("game_host:player-results", kwargs={"code": session.code})
+
+
+@pytest.mark.django_db
+def test_player_results_renders_ranking_and_marks_bound_player(client, session):
+    adam = Player.objects.create(session=session, name="Adam", score=500)
+    Player.objects.create(session=session, name="Beata", score=900)
+    Player.objects.create(session=session, name="Celina", score=900)
+    _bind_player_session(client, session, adam)
+    session.status = GameSession.Status.FINISHED
+    session.finished_at = timezone.now()
+    session.save(update_fields=["status", "finished_at"])
+
+    response = client.get(reverse("game_host:player-results", kwargs={"code": session.code}))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "Co-winners" in content
+    assert "Beata" in content
+    assert "Celina" in content
+    assert "Adam (you)" in content
+    assert "900 pts" in content
+    assert "500 pts" in content
+
+
+@pytest.mark.django_db
+def test_player_results_redirects_non_finished_session(client, session):
+    joined_player = Player.objects.create(session=session, name="Adam")
+    _bind_player_session(client, session, joined_player)
+
+    response = client.get(reverse("game_host:player-results", kwargs={"code": session.code}))
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == reverse("game_host:player-lobby", kwargs={"code": session.code})
+
+
+@pytest.mark.django_db
+def test_player_results_requires_bound_player(client, session):
+    session.status = GameSession.Status.FINISHED
+    session.finished_at = timezone.now()
+    session.save(update_fields=["status", "finished_at"])
+
+    response = client.get(reverse("game_host:player-results", kwargs={"code": session.code}))
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == f"{reverse('game_host:player-join')}?code={session.code}"
 
 
 @pytest.mark.django_db
@@ -2869,7 +3003,8 @@ def test_player_lobby_branches_to_locked_result_surface(client, session, track):
     assert "Round complete" in content
     assert "Correct artist: Artist A." in content
     assert "data-round-results" in content
-    assert "round.js?v=20260607c" in content
+    assert reverse("game_host:player-results", kwargs={"code": session.code}) in content
+    assert "round.js?v=20260607d" in content
 
 
 @pytest.mark.django_db

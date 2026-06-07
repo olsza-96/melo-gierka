@@ -47,6 +47,7 @@
       data-restart-url="{{ session_restart_url }}"
       data-next-url="{{ session_next_round_url }}"
       data-stop-playback-url="{{ session_stop_playback_url }}"
+      data-results-url="{{ host_results_url }}"
     >
       <div hidden>{% csrf_token %}</div>
       <p class="eyebrow">playback status</p>
@@ -137,5 +138,5 @@
   </main>
 
   <script src="{% static 'game/spotify_player.js' %}?v=20260607c" defer></script>
-  <script src="{% static 'game/round.js' %}?v=20260607c" defer></script>
+  <script src="{% static 'game/round.js' %}?v=20260607d" defer></script>
 {% endblock %}

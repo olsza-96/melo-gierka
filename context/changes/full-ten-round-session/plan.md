@@ -420,30 +420,30 @@ Rollback note: if the constraint-removal migration is rolled back while repeated
 
 #### Automated
 
-- [x] 2.1 Next-round lifecycle tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "next_round or full_session or finish_session"`.
-- [x] 2.2 Timeout-lock tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "deadline or timeout or late_answer"`.
-- [x] 2.3 Restart regression tests pass for non-first active rounds: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "restart"`.
-- [x] 2.4 Existing S-03 host-control tests still pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "start_round or pause or resume or skip or restart"`.
+- [x] 2.1 Next-round lifecycle tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "next_round or full_session or finish_session"`. — 1c6aecc
+- [x] 2.2 Timeout-lock tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "deadline or timeout or late_answer"`. — 1c6aecc
+- [x] 2.3 Restart regression tests pass for non-first active rounds: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "restart"`. — 1c6aecc
+- [x] 2.4 Existing S-03 host-control tests still pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "start_round or pause or resume or skip or restart"`. — 1c6aecc
 
 #### Manual
 
-- [x] 2.5 From a locked round 1 result state, the host can start round 2 and both host/player browsers move to the new round.
-- [x] 2.6 A timed-out round with unanswered players locks on the next poll/control request and missing players receive 0 points.
-- [x] 2.7 Restarting active round 2 replaces round 2, not round 1, and does not corrupt scores from round 1.
+- [x] 2.5 From a locked round 1 result state, the host can start round 2 and both host/player browsers move to the new round. — 1c6aecc
+- [x] 2.6 A timed-out round with unanswered players locks on the next poll/control request and missing players receive 0 points. — 1c6aecc
+- [x] 2.7 Restarting active round 2 replaces round 2, not round 1, and does not corrupt scores from round 1. — 1c6aecc
 
 ### Phase 3: Final Results Browser Flow
 
 #### Automated
 
-- [ ] 3.1 Final-results view tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "final_results or finished"`.
-- [ ] 3.2 Host/player route guard tests pass for finished and non-finished sessions: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "host_results or player_results or owner_guard"`.
-- [ ] 3.3 Template regression tests pass for dynamic round labels and result links: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "host_round or player_round or lobby"`.
+- [x] 3.1 Final-results view tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "final_results or finished"`.
+- [x] 3.2 Host/player route guard tests pass for finished and non-finished sessions: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "host_results or player_results or owner_guard"`.
+- [x] 3.3 Template regression tests pass for dynamic round labels and result links: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "host_round or player_round or lobby"`.
 
 #### Manual
 
-- [ ] 3.4 After round 10 locks, host and player browsers transition to dedicated final-results pages.
-- [ ] 3.5 Final results show all top-score tied players as co-winners.
-- [ ] 3.6 The full ranking includes every player and makes the bound player recognizable on the player page.
+- [x] 3.4 After round 10 locks, host and player browsers transition to dedicated final-results pages.
+- [x] 3.5 Final results show all top-score tied players as co-winners.
+- [x] 3.6 The full ranking includes every player and makes the bound player recognizable on the player page.
 
 ### Phase 4: Regression Coverage And Smoke Handoff
 

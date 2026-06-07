@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}melo-gierka | your final results {{ results_session.code }}{% endblock %}
+
+{% block content %}
+  <main class="lobby-grid">
+    <section class="panel lobby-hero">
+      <p class="eyebrow">final results</p>
+      <h1>Game complete.</h1>
+      <p class="panel-copy">
+        You played as {{ current_player.name }} in session {{ results_session.code }}.
+      </p>
+
+      <div class="session-code-card" aria-label="Session code">
+        <span class="session-code-label">Session code</span>
+        <strong class="session-code-value">{{ results_session.code }}</strong>
+      </div>
+    </section>
+
+    <section class="panel lobby-panel">
+      <p class="eyebrow">winner</p>
+      {% if winners|length == 1 %}
+        <h2>{{ winners.0.name }} wins with {{ winners.0.score }} pts</h2>
+      {% else %}
+        <h2>Co-winners</h2>
+        <p class="panel-copy">
+          {% for winner in winners %}{{ winner.name }}{% if not forloop.last %}, {% endif %}{% endfor %} share first place with {{ winners.0.score }} pts.
+        </p>
+      {% endif %}
+
+      <section class="roster-card">
+        <div class="roster-header">
+          <div>
+            <p class="eyebrow">ranking</p>
+            <h2>Final scores</h2>
+          </div>
+          <span class="roster-count">{{ players|length }} players</span>
+        </div>
+
+        <ol class="player-roster result-ranking">
+          {% for entry in ranking %}
+            <li class="player-roster-item{% if entry.is_current_player %} player-roster-item-current{% endif %}">
+              <span>#{{ entry.rank }} {{ entry.player.name }}{% if entry.is_current_player %} (you){% endif %}</span>
+              <strong>{{ entry.player.score }} pts</strong>
+            </li>
+          {% empty %}
+            <li class="player-roster-empty">No players finished this session.</li>
+          {% endfor %}
+        </ol>
+      </section>
+    </section>
+  </main>
+{% endblock %}

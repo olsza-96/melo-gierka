@@ -43,6 +43,12 @@
     window.location.assign(`${sessionPageUrl}${separator}round=live`);
   }
 
+  function transitionToResults(root) {
+    if (root.dataset.resultsUrl) {
+      window.location.assign(root.dataset.resultsUrl);
+    }
+  }
+
   function renderPlayers(root, snapshot) {
     const players = Array.isArray(snapshot.players) ? snapshot.players : [];
     const currentPlayer = root.dataset.currentPlayer || "";
@@ -108,6 +114,11 @@
 
       etag = response.headers.get("ETag") || etag;
       const snapshot = await response.json();
+
+      if (snapshot.status === "finished") {
+        transitionToResults(root);
+        return;
+      }
 
       if (shouldTransitionToRound(snapshot)) {
         transitionToRound(root);

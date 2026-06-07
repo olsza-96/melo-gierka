@@ -37,6 +37,7 @@
       data-round-state-root
       data-state-url="{{ session_state_url }}"
       data-answer-url="{{ session_answer_url }}"
+      data-results-url="{{ player_results_url }}"
       data-current-player="{{ joined_player.name }}"
     >
       <div hidden>{% csrf_token %}</div>
@@ -87,5 +88,5 @@
     </section>
   </main>
 
-  <script src="{% static 'game/round.js' %}?v=20260607c" defer></script>
+  <script src="{% static 'game/round.js' %}?v=20260607d" defer></script>
 {% endblock %}

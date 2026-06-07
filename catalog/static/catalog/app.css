@@ -305,6 +305,13 @@ h2 {
   font-weight: 700;
 }
 
+.result-ranking .player-roster-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
 .player-roster-item-current {
   border-color: rgba(14, 90, 71, 0.28);
   background: rgba(14, 90, 71, 0.08);

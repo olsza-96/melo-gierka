@@ -710,6 +710,29 @@ def _get_bound_player(request, *, code: str) -> Player | None:
     )
 
 
+def _final_results_context(session: GameSession, *, current_player: Player | None = None) -> dict:
+    players = list(session.players.order_by("-score", "joined_at"))
+    top_score = players[0].score if players else 0
+    winners = [player for player in players if player.score == top_score]
+    current_player_id = current_player.pk if current_player is not None else None
+    ranking = [
+        {
+            "rank": index + 1,
+            "player": player,
+            "is_current_player": player.pk == current_player_id,
+        }
+        for index, player in enumerate(players)
+    ]
+
+    return {
+        "results_session": session,
+        "players": players,
+        "winners": winners,
+        "ranking": ranking,
+        "current_player": current_player,
+    }
+
+
 @require_GET
 def spotify_login(request):
     if not _spotify_is_configured():
@@ -816,6 +839,10 @@ def host_lobby(request, code):
     _apply_session_lifecycle_for_code(code)
     session.refresh_from_db()
     current_round = _current_round_for_host(session)
+
+    if session.status == GameSession.Status.FINISHED:
+        return redirect("game_host:host-results", code=session.code)
+
     spotify_blocked_reason = _host_playback_block_reason(request)
     spotify_access_token = _get_host_access_token(request) or ""
 
@@ -847,6 +874,7 @@ def host_lobby(request, code):
                 "session_restart_url": reverse("game:session-restart", kwargs={"code": session.code}),
                 "session_next_round_url": reverse("game:session-next-round", kwargs={"code": session.code}),
                 "session_stop_playback_url": reverse("game:session-stop-playback", kwargs={"code": session.code}),
+                "host_results_url": reverse("game_host:host-results", kwargs={"code": session.code}),
             },
         ))
 
@@ -868,7 +896,24 @@ def host_lobby(request, code):
                 "game:session-start-round",
                 kwargs={"code": session.code},
             ),
+            "host_results_url": reverse("game_host:host-results", kwargs={"code": session.code}),
         },
+    ))
+
+
+@require_GET
+def host_results(request, code):
+    session = _get_owned_host_session(request, code=code)
+    _apply_session_lifecycle_for_code(code)
+    session.refresh_from_db()
+
+    if session.status != GameSession.Status.FINISHED:
+        return redirect("game_host:host-lobby", code=session.code)
+
+    return _session_page_response(render(
+        request,
+        "game/host_results.html",
+        _final_results_context(session),
     ))
 
 
@@ -953,6 +998,9 @@ def player_lobby(request, code):
     _apply_session_lifecycle_for_code(code)
     player.session.refresh_from_db()
     current_round = _current_round_for_session(player.session)
+    if player.session.status == GameSession.Status.FINISHED:
+        return redirect("game_host:player-results", code=player.session.code)
+
     if player.session.status == GameSession.Status.PLAYING and current_round is not None:
         viewer_answer = Answer.objects.filter(round=current_round, player=player).first()
         return _session_page_response(render(
@@ -965,6 +1013,7 @@ def player_lobby(request, code):
                 "viewer_answer": viewer_answer,
                 "session_state_url": reverse("game:session-state", kwargs={"code": player.session.code}),
                 "session_answer_url": reverse("game:session-answer", kwargs={"code": player.session.code}),
+                "player_results_url": reverse("game_host:player-results", kwargs={"code": player.session.code}),
             },
         ))
 
@@ -974,7 +1023,28 @@ def player_lobby(request, code):
         {
             "joined_player": player,
             "player_session": player.session,
+            "player_results_url": reverse("game_host:player-results", kwargs={"code": player.session.code}),
         },
+    ))
+
+
+@require_GET
+def player_results(request, code):
+    player = _get_bound_player(request, code=code)
+    if player is None:
+        messages.error(request, "Join a session before viewing final results.")
+        return redirect(f"{reverse('game_host:player-join')}?code={code}")
+
+    _apply_session_lifecycle_for_code(code)
+    player.session.refresh_from_db()
+
+    if player.session.status != GameSession.Status.FINISHED:
+        return redirect("game_host:player-lobby", code=player.session.code)
+
+    return _session_page_response(render(
+        request,
+        "game/player_results.html",
+        _final_results_context(player.session, current_player=player),
     ))
 
 
