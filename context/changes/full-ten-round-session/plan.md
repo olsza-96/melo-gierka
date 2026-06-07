@@ -449,15 +449,15 @@ Rollback note: if the constraint-removal migration is rolled back while repeated
 
 #### Automated
 
-- [x] 4.1 Full targeted S-04 suite passes: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "full_session or next_round or final_results or repeat_fallback"`.
-- [x] 4.2 Catalog capacity tests pass: `DJANGO_DEBUG=True uv run pytest catalog/tests.py -k "seed or catalog_capacity"`.
-- [x] 4.3 Full test suite passes: `DJANGO_DEBUG=True uv run pytest`.
-- [x] 4.4 Static collection still passes: `DJANGO_DEBUG=True uv run python manage.py collectstatic --noinput`.
-- [x] 4.5 Production-style checks remain acceptable: `DJANGO_DEBUG=False DJANGO_SECRET_KEY='<strong-placeholder>' DJANGO_ALLOWED_HOSTS=melo-gierka.fly.dev,localhost,127.0.0.1 uv run python manage.py check --deploy`.
+- [x] 4.1 Full targeted S-04 suite passes: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "full_session or next_round or final_results or repeat_fallback"`. — 1fd9f90
+- [x] 4.2 Catalog capacity tests pass: `DJANGO_DEBUG=True uv run pytest catalog/tests.py -k "seed or catalog_capacity"`. — 1fd9f90
+- [x] 4.3 Full test suite passes: `DJANGO_DEBUG=True uv run pytest`. — 1fd9f90
+- [x] 4.4 Static collection still passes: `DJANGO_DEBUG=True uv run python manage.py collectstatic --noinput`. — 1fd9f90
+- [x] 4.5 Production-style checks remain acceptable: `DJANGO_DEBUG=False DJANGO_SECRET_KEY='<strong-placeholder>' DJANGO_ALLOWED_HOSTS=melo-gierka.fly.dev,localhost,127.0.0.1 uv run python manage.py check --deploy`. — 1fd9f90
 
 #### Manual
 
-- [x] 4.6 A local host browser and at least one separate player browser complete all 10 rounds from lobby through final results.
-- [x] 4.7 A timeout round with no answer still advances the session correctly and gives the missing player 0 points.
-- [x] 4.8 A top-score tie displays co-winners on the final results page.
-- [x] 4.9 Optional deployed Fly smoke repeats the 10-round path with real OAuth and Spotify browser playback when credentials and timing allow.
+- [x] 4.6 A local host browser and at least one separate player browser complete all 10 rounds from lobby through final results. — 1fd9f90
+- [x] 4.7 A timeout round with no answer still advances the session correctly and gives the missing player 0 points. — 1fd9f90
+- [x] 4.8 A top-score tie displays co-winners on the final results page. — 1fd9f90
+- [x] 4.9 Optional deployed Fly smoke repeats the 10-round path with real OAuth and Spotify browser playback when credentials and timing allow. — 1fd9f90

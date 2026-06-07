@@ -1,7 +1,7 @@
 ---
 change_id: full-ten-round-session
 title: Full ten-round session
-status: implementing
+status: implemented
 created: 2026-06-07
 updated: 2026-06-07
 archived_at: null
