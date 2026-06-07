@@ -92,7 +92,7 @@ def test_round_unique_index_per_session(session, track):
 
 
 @pytest.mark.django_db
-def test_round_unique_track_per_session(session, track):
+def test_round_allows_repeated_track_per_session(session, track):
     started = timezone.now()
     Round.objects.create(
         session=session,
@@ -101,14 +101,115 @@ def test_round_unique_track_per_session(session, track):
         offset_ms=30_000,
         started_at=started,
     )
-    with pytest.raises(IntegrityError):
-        Round.objects.create(
-            session=session,
-            index=2,
-            track=track,
-            offset_ms=30_000,
-            started_at=started,
-        )
+    Round.objects.create(
+        session=session,
+        index=2,
+        track=track,
+        offset_ms=30_000,
+        started_at=started,
+    )
+
+    assert Round.objects.filter(session=session, track=track).count() == 2
+
+
+@pytest.mark.django_db
+def test_choose_round_track_prefers_unused_track_before_repeat_fallback(session, track, monkeypatch):
+    unused_track = Track.objects.create(
+        music_set=session.music_set,
+        spotify_track_id="unused-track",
+        artist="Artist B",
+        title="Title B",
+        duration_ms=180_000,
+    )
+    Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        started_at=timezone.now(),
+    )
+
+    checked_track_ids = []
+    monkeypatch.setattr(game_views.secrets, "choice", lambda sequence: sequence[0])
+
+    def fetch_track_details(*, access_token, spotify_track_id):
+        checked_track_ids.append(spotify_track_id)
+        return {
+            "spotify_track_id": spotify_track_id,
+            "is_playable": True,
+            "restriction_reason": None,
+        }
+
+    monkeypatch.setattr(spotify_auth, "fetch_track_details", fetch_track_details)
+
+    selected_track = game_views._choose_round_track(session, access_token="access-token")
+
+    assert selected_track == unused_track
+    assert checked_track_ids == [unused_track.spotify_track_id]
+
+
+@pytest.mark.django_db
+def test_choose_round_track_uses_repeat_fallback_when_unused_tracks_are_unplayable(session, track, monkeypatch):
+    unused_track = Track.objects.create(
+        music_set=session.music_set,
+        spotify_track_id="unused-track",
+        artist="Artist B",
+        title="Title B",
+        duration_ms=180_000,
+    )
+    Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        started_at=timezone.now(),
+    )
+
+    monkeypatch.setattr(game_views.secrets, "choice", lambda sequence: sequence[0])
+
+    def fetch_track_details(*, access_token, spotify_track_id):
+        return {
+            "spotify_track_id": spotify_track_id,
+            "is_playable": spotify_track_id != unused_track.spotify_track_id,
+            "restriction_reason": "market" if spotify_track_id == unused_track.spotify_track_id else None,
+        }
+
+    monkeypatch.setattr(spotify_auth, "fetch_track_details", fetch_track_details)
+
+    selected_track = game_views._choose_round_track(session, access_token="access-token")
+
+    assert selected_track == track
+
+
+@pytest.mark.django_db
+def test_choose_round_track_returns_none_when_no_playable_track_exists(session, track, monkeypatch):
+    unused_track = Track.objects.create(
+        music_set=session.music_set,
+        spotify_track_id="unused-track",
+        artist="Artist B",
+        title="Title B",
+        duration_ms=180_000,
+    )
+    Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        started_at=timezone.now(),
+    )
+
+    monkeypatch.setattr(game_views.secrets, "choice", lambda sequence: sequence[0])
+    monkeypatch.setattr(
+        spotify_auth,
+        "fetch_track_details",
+        lambda *, access_token, spotify_track_id: {
+            "spotify_track_id": spotify_track_id,
+            "is_playable": False,
+            "restriction_reason": "market",
+        },
+    )
+
+    assert game_views._choose_round_track(session, access_token="access-token") is None
 
 
 @pytest.mark.django_db

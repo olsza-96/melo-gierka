@@ -78,10 +78,6 @@ class Round(models.Model):
                 fields=["session", "index"],
                 name="unique_round_index_per_session",
             ),
-            models.UniqueConstraint(
-                fields=["session", "track"],
-                name="unique_track_per_session",
-            ),
         ]
         ordering = ["session", "index"]
 

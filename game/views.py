@@ -169,13 +169,8 @@ def _host_playback_block_reason(request) -> str | None:
     return None
 
 
-def _choose_round_track(session: GameSession, *, access_token: str):
-    used_track_ids = session.rounds.values_list("track_id", flat=True)
-    available_tracks = list(session.music_set.tracks.exclude(pk__in=used_track_ids))
-    if not available_tracks:
-        return None
-
-    candidates = available_tracks[:]
+def _choose_playable_track(candidates, *, access_token: str):
+    candidates = list(candidates)
     while candidates:
         track = secrets.choice(candidates)
         candidates.remove(track)
@@ -199,6 +194,18 @@ def _choose_round_track(session: GameSession, *, access_token: str):
         return track
 
     return None
+
+
+def _choose_round_track(session: GameSession, *, access_token: str):
+    used_track_ids = list(session.rounds.values_list("track_id", flat=True))
+    unused_tracks = list(session.music_set.tracks.exclude(pk__in=used_track_ids))
+
+    track = _choose_playable_track(unused_tracks, access_token=access_token)
+    if track is not None:
+        return track
+
+    repeated_tracks = list(session.music_set.tracks.filter(pk__in=used_track_ids))
+    return _choose_playable_track(repeated_tracks, access_token=access_token)
 
 
 def _build_answer_options(session: GameSession, *, correct_artist: str) -> list[str] | None:
