@@ -8,6 +8,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.contrib import messages
 from django.db import IntegrityError, transaction
+from django.db.models import F
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -33,6 +34,7 @@ ROUND_DURATION_MS = 30_000
 ROUND_OFFSET_MIN_RATIO = 0.2
 ROUND_OFFSET_MAX_RATIO = 0.8
 ROUND_MAX_POINTS = 1_000
+SESSION_ROUND_LIMIT = 10
 PLAYBACK_DEVICE_READY_ATTEMPTS = 5
 PLAYBACK_DEVICE_READY_DELAY_SECONDS = 0.2
 logger = logging.getLogger(__name__)
@@ -250,6 +252,57 @@ def _current_round_for_host(session: GameSession) -> Round | None:
 
 def _current_round_for_session(session: GameSession) -> Round | None:
     return session.rounds.select_related("track").order_by("-index").first()
+
+
+def _current_round_for_update(session: GameSession) -> Round | None:
+    return session.rounds.select_for_update().select_related("track").order_by("-index").first()
+
+
+def _round_is_expired(round_obj: Round | None, *, now) -> bool:
+    return (
+        round_obj is not None
+        and round_obj.locked_at is None
+        and round_obj.paused_at is None
+        and round_obj.deadline_at is not None
+        and round_obj.deadline_at <= now
+    )
+
+
+def _round_can_start_next(round_obj: Round | None) -> bool:
+    return round_obj is not None and round_obj.locked_at is not None and round_obj.index < SESSION_ROUND_LIMIT
+
+
+def _should_finish_after_round(round_obj: Round | None) -> bool:
+    return round_obj is not None and round_obj.locked_at is not None and round_obj.index >= SESSION_ROUND_LIMIT
+
+
+def _apply_session_lifecycle(locked_session: GameSession, *, now) -> Round | None:
+    current_round = _current_round_for_update(locked_session)
+
+    if locked_session.status != GameSession.Status.PLAYING or current_round is None:
+        return current_round
+
+    if _round_is_expired(current_round, now=now):
+        current_round.locked_at = now
+        current_round.save(update_fields=["locked_at"])
+
+    if _should_finish_after_round(current_round):
+        update_fields = ["status"]
+        locked_session.status = GameSession.Status.FINISHED
+        if locked_session.finished_at is None:
+            locked_session.finished_at = now
+            update_fields.append("finished_at")
+        locked_session.save(update_fields=update_fields)
+
+    return current_round
+
+
+def _apply_session_lifecycle_for_code(code: str) -> None:
+    with transaction.atomic():
+        locked_session = GameSession.objects.select_for_update().filter(code=code).first()
+        if locked_session is None:
+            return
+        _apply_session_lifecycle(locked_session, now=timezone.now())
 
 
 def _session_page_response(response):
@@ -616,6 +669,7 @@ def _resume_round_playback(*, access_token: str, device_id: str) -> None:
 
 
 def _host_round_control_payload(*, code: str) -> dict:
+    _apply_session_lifecycle_for_code(code)
     state = get_session_state(code)
     if state is None:
         return {}
@@ -759,6 +813,8 @@ def session_create(request):
 @require_GET
 def host_lobby(request, code):
     session = _get_owned_host_session(request, code=code)
+    _apply_session_lifecycle_for_code(code)
+    session.refresh_from_db()
     current_round = _current_round_for_host(session)
     spotify_blocked_reason = _host_playback_block_reason(request)
     spotify_access_token = _get_host_access_token(request) or ""
@@ -789,6 +845,8 @@ def host_lobby(request, code):
                 "session_resume_url": reverse("game:session-resume", kwargs={"code": session.code}),
                 "session_skip_url": reverse("game:session-skip", kwargs={"code": session.code}),
                 "session_restart_url": reverse("game:session-restart", kwargs={"code": session.code}),
+                "session_next_round_url": reverse("game:session-next-round", kwargs={"code": session.code}),
+                "session_stop_playback_url": reverse("game:session-stop-playback", kwargs={"code": session.code}),
             },
         ))
 
@@ -892,6 +950,8 @@ def player_lobby(request, code):
         messages.error(request, "Join a session before entering the player lobby.")
         return redirect(f"{reverse('game_host:player-join')}?code={code}")
 
+    _apply_session_lifecycle_for_code(code)
+    player.session.refresh_from_db()
     current_round = _current_round_for_session(player.session)
     if player.session.status == GameSession.Status.PLAYING and current_round is not None:
         viewer_answer = Answer.objects.filter(round=current_round, player=player).first()
@@ -922,6 +982,7 @@ def player_lobby(request, code):
 def session_state(request, code):
     bound_player = _get_bound_player(request, code=code)
     viewer_player_id = bound_player.pk if bound_player is not None else None
+    _apply_session_lifecycle_for_code(code)
     state = get_session_state(code, viewer_player_id=viewer_player_id)
     if state is None:
         return JsonResponse(
@@ -1044,6 +1105,10 @@ def session_answer(request, code):
             if round_obj.deadline_at is not None and answered_at >= round_obj.deadline_at:
                 round_obj.locked_at = answered_at
                 round_obj.save(update_fields=["locked_at"])
+                if _should_finish_after_round(round_obj):
+                    session.status = GameSession.Status.FINISHED
+                    session.finished_at = session.finished_at or answered_at
+                    session.save(update_fields=["status", "finished_at"])
                 return JsonResponse(
                     {
                         "error": {
@@ -1099,6 +1164,10 @@ def session_answer(request, code):
             if Answer.objects.filter(round=round_obj).count() >= session.players.count():
                 round_obj.locked_at = answered_at
                 round_obj.save(update_fields=["locked_at"])
+                if _should_finish_after_round(round_obj):
+                    session.status = GameSession.Status.FINISHED
+                    session.finished_at = session.finished_at or answered_at
+                    session.save(update_fields=["status", "finished_at"])
 
     except Player.DoesNotExist:
         return JsonResponse(
@@ -1123,6 +1192,8 @@ def session_answer(request, code):
 @require_http_methods(["POST"])
 def session_pause(request, code):
     session = _get_owned_host_session(request, code=code)
+    _apply_session_lifecycle_for_code(code)
+    session.refresh_from_db()
     try:
         access_token, device_id, device_state = _host_playback_device_for_round_control(request, code=code)
     except spotify_auth.SpotifyOAuthError as exc:
@@ -1245,8 +1316,100 @@ def session_pause(request, code):
 
 
 @require_http_methods(["POST"])
+def session_stop_playback(request, code):
+    session = _get_owned_host_session(request, code=code)
+    _apply_session_lifecycle_for_code(code)
+    session.refresh_from_db()
+
+    try:
+        payload = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        payload = {}
+
+    requested_round_index = payload.get("round_index")
+    if requested_round_index is not None:
+        try:
+            requested_round_index = int(requested_round_index)
+        except (TypeError, ValueError):
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "invalid_round_index", "message": "Round index must be a number."},
+                status=400,
+            )
+
+    current_round = session.rounds.order_by("-index").first()
+    if session.status not in {GameSession.Status.PLAYING, GameSession.Status.FINISHED} or current_round is None:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={"code": "round_not_active", "message": "There is no round playback to stop."},
+            status=409,
+        )
+
+    if requested_round_index is not None and requested_round_index != current_round.index:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={"code": "stale_round", "message": "This playback stop request belongs to an earlier round."},
+            status=409,
+        )
+
+    if current_round.locked_at is None:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={"code": "round_not_locked", "message": "Round playback stops automatically after the round locks."},
+            status=409,
+        )
+
+    playback_state = _get_host_playback_state(request, code=code)
+    access_token = _get_host_access_token(request)
+    device_id = (playback_state or {}).get("device_id")
+    if not playback_state or not playback_state.get("ready") or not access_token or not device_id:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={
+                "code": "playback_not_ready",
+                "message": "Spotify browser playback is not ready for this session.",
+            },
+            status=409,
+        )
+
+    try:
+        spotify_auth.pause_playback(access_token=access_token, device_id=device_id)
+    except spotify_auth.SpotifyOAuthError as exc:
+        logger.warning(
+            "Spotify stop-playback failed for locked session %s on device %s: status=%s body=%r playback_state=%r",
+            code,
+            device_id,
+            exc.status_code,
+            exc.response_body,
+            playback_state,
+        )
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={
+                "code": "spotify_pause_failed",
+                "message": "Spotify playback could not be stopped for the completed round.",
+            },
+            status=502,
+        )
+
+    return _round_control_success_response(
+        request,
+        code=code,
+        payload={"stopped": True, **_host_round_control_payload(code=code)},
+    )
+
+
+@require_http_methods(["POST"])
 def session_resume(request, code):
     session = _get_owned_host_session(request, code=code)
+    _apply_session_lifecycle_for_code(code)
+    session.refresh_from_db()
     try:
         access_token, device_id, device_state = _host_playback_device_for_round_control(request, code=code)
     except spotify_auth.SpotifyOAuthError as exc:
@@ -1374,6 +1537,8 @@ def session_resume(request, code):
 @require_http_methods(["POST"])
 def session_skip(request, code):
     session = _get_owned_host_session(request, code=code)
+    _apply_session_lifecycle_for_code(code)
+    session.refresh_from_db()
 
     current_round = session.rounds.order_by("-index").first()
     if session.status != GameSession.Status.PLAYING or current_round is None:
@@ -1467,9 +1632,14 @@ def session_skip(request, code):
                 status=409,
             )
 
-        current_round.locked_at = timezone.now()
+        locked_at = timezone.now()
+        current_round.locked_at = locked_at
         current_round.paused_at = None
         current_round.save(update_fields=["locked_at", "paused_at"])
+        if _should_finish_after_round(current_round):
+            locked_session.status = GameSession.Status.FINISHED
+            locked_session.finished_at = locked_session.finished_at or locked_at
+            locked_session.save(update_fields=["status", "finished_at"])
 
     return _round_control_success_response(
         request,
@@ -1481,6 +1651,32 @@ def session_skip(request, code):
 @require_http_methods(["POST"])
 def session_restart(request, code):
     session = _get_owned_host_session(request, code=code)
+    _apply_session_lifecycle_for_code(code)
+    session.refresh_from_db()
+
+    with transaction.atomic():
+        locked_session = GameSession.objects.select_for_update().select_related("music_set").get(pk=session.pk)
+        current_round = _apply_session_lifecycle(locked_session, now=timezone.now())
+
+        if locked_session.status != GameSession.Status.PLAYING or current_round is None:
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "round_not_active", "message": "There is no round to restart."},
+                status=409,
+            )
+
+        if current_round.locked_at is not None:
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "round_locked", "message": "This round is already locked."},
+                status=409,
+            )
+
+        current_round_id = current_round.pk
+        current_round_index = current_round.index
+
     spotify_blocked_reason = _host_playback_block_reason(request)
     if spotify_blocked_reason:
         return _round_control_error_response(
@@ -1540,20 +1736,6 @@ def session_restart(request, code):
         }
         playback_state = request.session[SPOTIFY_PLAYBACK_SESSION_KEY]
 
-    with transaction.atomic():
-        locked_session = GameSession.objects.select_for_update().select_related("music_set").get(pk=session.pk)
-        current_round = locked_session.rounds.select_for_update().order_by("-index").first()
-
-        if locked_session.status != GameSession.Status.PLAYING or current_round is None:
-            return _round_control_error_response(
-                request,
-                code=code,
-                error={"code": "round_not_active", "message": "There is no round to restart."},
-                status=409,
-            )
-
-        current_round_id = current_round.pk
-
     replacement_candidate = _build_round_candidate(
         session,
         access_token=access_token,
@@ -1600,7 +1782,7 @@ def session_restart(request, code):
 
     with transaction.atomic():
         locked_session = GameSession.objects.select_for_update().select_related("music_set").get(pk=session.pk)
-        current_round = locked_session.rounds.select_for_update().order_by("-index").first()
+        current_round = _apply_session_lifecycle(locked_session, now=timezone.now())
 
         if (
             locked_session.status != GameSession.Status.PLAYING
@@ -1614,10 +1796,21 @@ def session_restart(request, code):
                 status=409,
             )
 
+        if current_round.locked_at is not None:
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "round_locked", "message": "This round is already locked."},
+                status=409,
+            )
+
+        for answer in current_round.answers.all():
+            if answer.points_awarded:
+                Player.objects.filter(pk=answer.player_id).update(score=F("score") - answer.points_awarded)
         current_round.delete()
         replacement_round = Round.objects.create(
             session=locked_session,
-            index=1,
+            index=current_round_index,
             track=replacement_candidate["track"],
             offset_ms=replacement_candidate["offset_ms"],
             answer_options=replacement_candidate["answer_options"],
@@ -1926,4 +2119,191 @@ def session_start_round(request, code):
             },
             "redirect_url": reverse("game_host:host-lobby", kwargs={"code": code}),
         }
+    )
+
+
+@require_http_methods(["POST"])
+def session_next_round(request, code):
+    session = _get_owned_host_session(request, code=code)
+    _apply_session_lifecycle_for_code(code)
+    session.refresh_from_db()
+
+    with transaction.atomic():
+        locked_session = GameSession.objects.select_for_update().select_related("music_set").get(pk=session.pk)
+        current_round = _apply_session_lifecycle(locked_session, now=timezone.now())
+
+        if locked_session.status == GameSession.Status.FINISHED:
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "session_finished", "message": "This session is already finished."},
+                status=409,
+            )
+
+        if locked_session.status != GameSession.Status.PLAYING or current_round is None:
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "round_not_active", "message": "There is no locked round to advance."},
+                status=409,
+            )
+
+        if not _round_can_start_next(current_round):
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "round_not_locked", "message": "Lock the current round before starting the next one."},
+                status=409,
+            )
+
+        next_round_index = current_round.index + 1
+
+    spotify_blocked_reason = _host_playback_block_reason(request)
+    if spotify_blocked_reason:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={"code": "spotify_premium_required", "message": spotify_blocked_reason},
+            status=403,
+        )
+
+    playback_state = _get_host_playback_state(request, code=code)
+    access_token = _get_host_access_token(request)
+    if not playback_state or not playback_state.get("ready") or not access_token:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={
+                "code": "playback_not_ready",
+                "message": "Activate the Spotify browser player before starting the next round.",
+            },
+            status=409,
+        )
+
+    try:
+        device_state = _resolve_start_round_playback_device(
+            access_token=access_token,
+            preferred_device_id=playback_state["device_id"],
+        )
+    except spotify_auth.SpotifyOAuthError:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={
+                "code": "spotify_device_lookup_failed",
+                "message": "Spotify browser playback could not be verified right now. Try starting the next round again.",
+            },
+            status=502,
+        )
+
+    if device_state is None or device_state.get("is_restricted"):
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={"code": "spotify_device_not_ready", "message": _playback_device_error_message(device_state)},
+            status=409,
+        )
+
+    if device_state.get("id") and device_state.get("id") != playback_state["device_id"]:
+        request.session[SPOTIFY_PLAYBACK_SESSION_KEY] = {
+            **playback_state,
+            "device_id": device_state["id"],
+        }
+        playback_state = request.session[SPOTIFY_PLAYBACK_SESSION_KEY]
+
+    round_candidate = _build_round_candidate(session, access_token=access_token)
+    if round_candidate is None:
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={
+                "code": "next_round_unavailable",
+                "message": "A playable next round could not be created for this music set.",
+            },
+            status=409,
+        )
+
+    try:
+        _start_round_playback(
+            access_token=access_token,
+            device_id=playback_state["device_id"],
+            spotify_track_id=round_candidate["track"].spotify_track_id,
+            position_ms=round_candidate["offset_ms"],
+        )
+    except spotify_auth.SpotifyOAuthError as exc:
+        if exc.status_code == 409:
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "spotify_device_not_active", "message": str(exc)},
+                status=409,
+            )
+
+        return _round_control_error_response(
+            request,
+            code=code,
+            error={
+                "code": "spotify_playback_failed",
+                "message": "Spotify playback could not start the next round on the active browser device.",
+            },
+            status=502,
+        )
+
+    with transaction.atomic():
+        locked_session = GameSession.objects.select_for_update().select_related("music_set").get(pk=session.pk)
+        current_round = _apply_session_lifecycle(locked_session, now=timezone.now())
+
+        if locked_session.status == GameSession.Status.FINISHED:
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "session_finished", "message": "This session is already finished."},
+                status=409,
+            )
+
+        if locked_session.status != GameSession.Status.PLAYING or current_round is None:
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "round_not_active", "message": "There is no locked round to advance."},
+                status=409,
+            )
+
+        if current_round.index + 1 != next_round_index:
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "round_already_advanced", "message": "This session already advanced from that result state."},
+                status=409,
+            )
+
+        if not _round_can_start_next(current_round):
+            return _round_control_error_response(
+                request,
+                code=code,
+                error={"code": "round_not_locked", "message": "Lock the current round before starting the next one."},
+                status=409,
+            )
+
+        round_obj = Round.objects.create(
+            session=locked_session,
+            index=next_round_index,
+            track=round_candidate["track"],
+            offset_ms=round_candidate["offset_ms"],
+            answer_options=round_candidate["answer_options"],
+            started_at=round_candidate["started_at"],
+            deadline_at=round_candidate["deadline_at"],
+        )
+
+    return _round_control_success_response(
+        request,
+        code=code,
+        payload={
+            "playback": {
+                "device_id": playback_state["device_id"],
+                "spotify_track_id": round_obj.track.spotify_track_id,
+                "offset_ms": round_obj.offset_ms,
+            },
+            **_host_round_control_payload(code=code),
+        },
     )

@@ -57,6 +57,10 @@ Starting the next round must preserve the S-03 Spotify-outside-transaction patte
 
 Restart is only available for an unlocked active round. It must replace the current round with the same index, not `index=1`, and it must roll back any points awarded by answers on that active round before deleting those answers. Locked historical rounds are not restartable in S-04.
 
+### Deferred Follow-Up: Duplicate Answer Option Artists
+
+Manual testing showed that a round can render the same artist name more than once in the four answer options. Do not fix this inside Phase 2; capture it for a later selection-quality pass. The eventual fix should make `_build_answer_options()` return distinct artist labels whenever the music set has enough distinct artists, and should add a regression test that fails when duplicate option text is shown for a round.
+
 ## Phase 1: Catalog Capacity And Round Invariants
 
 ### Overview
@@ -402,30 +406,30 @@ Rollback note: if the constraint-removal migration is rolled back while repeated
 
 #### Automated
 
-- [x] 1.1 Expanded fixture loads cleanly: `DJANGO_DEBUG=True uv run python manage.py seed_catalog`.
-- [x] 1.2 Migration drift is clean after the constraint change: `DJANGO_DEBUG=True uv run python manage.py makemigrations --check --dry-run`.
-- [x] 1.3 Round selection tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "round_unique or choose_round_track or repeat_fallback"`.
-- [x] 1.4 Django configuration remains valid: `DJANGO_DEBUG=True uv run python manage.py check`.
+- [x] 1.1 Expanded fixture loads cleanly: `DJANGO_DEBUG=True uv run python manage.py seed_catalog`. — afdc590
+- [x] 1.2 Migration drift is clean after the constraint change: `DJANGO_DEBUG=True uv run python manage.py makemigrations --check --dry-run`. — afdc590
+- [x] 1.3 Round selection tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "round_unique or choose_round_track or repeat_fallback"`. — afdc590
+- [x] 1.4 Django configuration remains valid: `DJANGO_DEBUG=True uv run python manage.py check`. — afdc590
 
 #### Manual
 
-- [x] 1.5 In Django shell, each seeded music set reports at least 10 tracks.
-- [x] 1.6 Spot-check the host create-session form still lists all 5 sets after reseeding.
+- [x] 1.5 In Django shell, each seeded music set reports at least 10 tracks. — afdc590
+- [x] 1.6 Spot-check the host create-session form still lists all 5 sets after reseeding. — afdc590
 
 ### Phase 2: Host-Paced Round Lifecycle
 
 #### Automated
 
-- [ ] 2.1 Next-round lifecycle tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "next_round or full_session or finish_session"`.
-- [ ] 2.2 Timeout-lock tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "deadline or timeout or late_answer"`.
-- [ ] 2.3 Restart regression tests pass for non-first active rounds: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "restart"`.
-- [ ] 2.4 Existing S-03 host-control tests still pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "start_round or pause or resume or skip or restart"`.
+- [x] 2.1 Next-round lifecycle tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "next_round or full_session or finish_session"`.
+- [x] 2.2 Timeout-lock tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "deadline or timeout or late_answer"`.
+- [x] 2.3 Restart regression tests pass for non-first active rounds: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "restart"`.
+- [x] 2.4 Existing S-03 host-control tests still pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "start_round or pause or resume or skip or restart"`.
 
 #### Manual
 
-- [ ] 2.5 From a locked round 1 result state, the host can start round 2 and both host/player browsers move to the new round.
-- [ ] 2.6 A timed-out round with unanswered players locks on the next poll/control request and missing players receive 0 points.
-- [ ] 2.7 Restarting active round 2 replaces round 2, not round 1, and does not corrupt scores from round 1.
+- [x] 2.5 From a locked round 1 result state, the host can start round 2 and both host/player browsers move to the new round.
+- [x] 2.6 A timed-out round with unanswered players locks on the next poll/control request and missing players receive 0 points.
+- [x] 2.7 Restarting active round 2 replaces round 2, not round 1, and does not corrupt scores from round 1.
 
 ### Phase 3: Final Results Browser Flow
 

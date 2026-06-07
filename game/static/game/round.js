@@ -108,8 +108,11 @@
     const resumeButton = controlsRoot.querySelector('[data-round-control="resume"]');
     const skipButton = controlsRoot.querySelector('[data-round-control="skip"]');
     const restartButton = controlsRoot.querySelector('[data-round-control="restart"]');
+    const nextButton = controlsRoot.querySelector('[data-round-control="next"]');
     const isPaused = roundBody.phase === "paused";
     const isLocked = roundBody.phase === "locked";
+    const isFinished = snapshot.status === "finished";
+    const canStartNext = isLocked && !isFinished && Number(roundBody.index || 0) < 10;
 
     if (pauseButton) {
       pauseButton.hidden = isPaused || isLocked;
@@ -124,8 +127,115 @@
       skipButton.disabled = isLocked;
     }
     if (restartButton) {
-      restartButton.hidden = false;
-      restartButton.disabled = false;
+      restartButton.hidden = isLocked || isFinished;
+      restartButton.disabled = isLocked || isFinished;
+    }
+    if (nextButton) {
+      nextButton.hidden = !canStartNext;
+      nextButton.disabled = !canStartNext;
+    }
+  }
+
+  function renderHostPlaybackMetadata(root, snapshot) {
+    if (!root.hasAttribute("data-spotify-player-root")) {
+      return;
+    }
+
+    const roundBody = snapshot.current_round || {};
+    const trackIdNode = root.querySelector("[data-track-id]");
+    const offsetNode = root.querySelector("[data-round-offset]");
+    const optionsRoot = root.querySelector("[data-answer-options]");
+
+    if (trackIdNode && roundBody.track && roundBody.track.spotify_track_id) {
+      trackIdNode.textContent = roundBody.track.spotify_track_id;
+    }
+    if (offsetNode && Number.isFinite(Number(roundBody.offset_ms))) {
+      offsetNode.textContent = `${roundBody.offset_ms} ms`;
+    }
+    if (optionsRoot && Array.isArray(roundBody.answer_options)) {
+      optionsRoot.textContent = roundBody.answer_options.join(", ");
+    }
+  }
+
+  function renderHostPlaybackPayload(root, playback) {
+    if (!root.hasAttribute("data-spotify-player-root") || !playback) {
+      return;
+    }
+
+    const trackIdNode = root.querySelector("[data-track-id]");
+    const offsetNode = root.querySelector("[data-round-offset]");
+    const playbackStatus = root.querySelector("[data-playback-status]");
+
+    if (trackIdNode && playback.spotify_track_id) {
+      trackIdNode.textContent = playback.spotify_track_id;
+    }
+    if (offsetNode && Number.isFinite(Number(playback.offset_ms))) {
+      offsetNode.textContent = `${playback.offset_ms} ms`;
+    }
+    if (playbackStatus && playback.spotify_track_id) {
+      playbackStatus.textContent = `Spotify started track ${playback.spotify_track_id}.`;
+    }
+  }
+
+  function renderPlayerAnswerOptions(root, roundBody) {
+    if (!root.dataset.answerUrl || !Array.isArray(roundBody.answer_options)) {
+      return;
+    }
+
+    const optionsRoot = root.querySelector("[data-answer-options]");
+    if (!optionsRoot) {
+      return;
+    }
+
+    const optionSignature = JSON.stringify({
+      round_index: roundBody.index,
+      answer_options: roundBody.answer_options,
+    });
+    if (optionsRoot.dataset.optionSignature === optionSignature) {
+      return;
+    }
+
+    optionsRoot.dataset.optionSignature = optionSignature;
+    optionsRoot.replaceChildren();
+    roundBody.answer_options.forEach(function (option) {
+      const button = document.createElement("button");
+      button.className = "button button-secondary";
+      button.type = "button";
+      button.dataset.answerOption = "";
+      button.value = option;
+      button.textContent = option;
+      optionsRoot.appendChild(button);
+    });
+  }
+
+  function pauseHostPlaybackForLockedRound(root, roundBody) {
+    if (!root.hasAttribute("data-spotify-player-root") || !roundBody || roundBody.phase !== "locked") {
+      return;
+    }
+
+    const roundIndex = Number(roundBody.index || 0);
+    if (!roundIndex || root._playbackPausedForLockedRoundIndex === roundIndex) {
+      return;
+    }
+
+    root._playbackPausedForLockedRoundIndex = roundIndex;
+    if (root.dataset.stopPlaybackUrl) {
+      postJson(root, root.dataset.stopPlaybackUrl, { round_index: roundIndex }).then(function (result) {
+        const playbackStatus = root.querySelector("[data-playback-status]");
+        if (!result.response.ok && playbackStatus) {
+          playbackStatus.textContent = result.body.error?.message || "Round complete. Pause Spotify manually if playback is still audible.";
+        }
+      });
+      return;
+    }
+
+    if (typeof root._pauseSpotifyPlayback === "function") {
+      root._pauseSpotifyPlayback().catch(function () {
+        const playbackStatus = root.querySelector("[data-playback-status]");
+        if (playbackStatus) {
+          playbackStatus.textContent = "Round complete. Pause Spotify manually if playback is still audible.";
+        }
+      });
     }
   }
 
@@ -143,6 +253,9 @@
 
     renderScores(root, snapshot);
     renderControls(root, snapshot);
+    renderHostPlaybackMetadata(root, snapshot);
+    renderPlayerAnswerOptions(root, roundBody);
+    pauseHostPlaybackForLockedRound(root, roundBody);
 
     if (roundBody.phase === "paused") {
       countdownNode.textContent = "Paused";
@@ -265,21 +378,24 @@
       return;
     }
 
-    root.querySelectorAll("[data-answer-option]").forEach(function (button) {
-      button.addEventListener("click", async function () {
-        const statusNode = root.querySelector("[data-round-status]");
-        const result = await postJson(root, root.dataset.answerUrl, { artist: button.value });
-        if (!statusNode) {
-          return;
-        }
+    root.addEventListener("click", async function (event) {
+      const button = event.target.closest("[data-answer-option]");
+      if (!button || !root.contains(button)) {
+        return;
+      }
 
-        if (!result.response.ok) {
-          statusNode.textContent = result.body.error?.message || "Answer submission failed.";
-          return;
-        }
+      const statusNode = root.querySelector("[data-round-status]");
+      const result = await postJson(root, root.dataset.answerUrl, { artist: button.value });
+      if (!statusNode) {
+        return;
+      }
 
-        statusNode.textContent = "Your answer is locked.";
-      });
+      if (!result.response.ok) {
+        statusNode.textContent = result.body.error?.message || "Answer submission failed.";
+        return;
+      }
+
+      statusNode.textContent = "Your answer is locked.";
     });
   }
 
@@ -289,8 +405,9 @@
       resume: root.dataset.resumeUrl,
       skip: root.dataset.skipUrl,
       restart: root.dataset.restartUrl,
+      next: root.dataset.nextUrl,
     };
-    if (!controls.pause && !controls.resume && !controls.skip && !controls.restart) {
+    if (!controls.pause && !controls.resume && !controls.skip && !controls.restart && !controls.next) {
       return;
     }
 
@@ -332,11 +449,8 @@
     }
 
     root.querySelectorAll("[data-round-control]").forEach(function (button) {
-      if (button.form) {
-        return;
-      }
-
-      button.addEventListener("click", async function () {
+      button.addEventListener("click", async function (event) {
+        event.preventDefault();
         if (controlRequestInFlight) {
           return;
         }
@@ -352,6 +466,10 @@
         setControlButtonsDisabled(true);
 
         try {
+          if ((action === "next" || action === "restart") && typeof root._activateSpotifyPlayback === "function") {
+            await root._activateSpotifyPlayback();
+          }
+
           const result = await postJson(root, url, {});
           if (!result.response.ok) {
             statusNode.textContent = result.body.error?.message || "Round control failed.";
@@ -359,6 +477,7 @@
           }
 
           const appliedServerSnapshot = applyControlSnapshot(result.body.snapshot);
+          renderHostPlaybackPayload(root, result.body.playback);
 
           if (action === "pause") {
             statusNode.textContent = "Round paused.";
@@ -394,6 +513,15 @@
             statusNode.textContent = "Round skipped.";
           } else if (action === "restart") {
             statusNode.textContent = "Round restarted.";
+          } else if (action === "next") {
+            statusNode.textContent = "Next round started.";
+          }
+
+          if (action === "next" || action === "restart") {
+            if (typeof root._refreshRoundSnapshot === "function") {
+              await root._refreshRoundSnapshot();
+            }
+            return;
           }
 
           reloadRoundPage();

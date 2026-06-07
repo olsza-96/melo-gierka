@@ -10,7 +10,7 @@
       {% if current_round.locked_at %}
         <h1>Round {{ current_round.index }} results.</h1>
         <p class="panel-copy">
-          The round is complete. Review the result state or restart the round from this screen.
+          The round is complete. Review the result state, then start the next round from this screen.
         </p>
       {% elif current_round.paused_at %}
         <h1>Round {{ current_round.index }} is paused.</h1>
@@ -29,7 +29,7 @@
         <strong class="session-code-value">{{ host_session.code }}</strong>
       </div>
 
-      <p class="lobby-status">Round 1 is running for {{ host_session.music_set.name }}.</p>
+      <p class="lobby-status">Round {{ current_round.index }} is running for {{ host_session.music_set.name }}.</p>
     </section>
 
     <section
@@ -45,6 +45,8 @@
       data-resume-url="{{ session_resume_url }}"
       data-skip-url="{{ session_skip_url }}"
       data-restart-url="{{ session_restart_url }}"
+      data-next-url="{{ session_next_round_url }}"
+      data-stop-playback-url="{{ session_stop_playback_url }}"
     >
       <div hidden>{% csrf_token %}</div>
       <p class="eyebrow">playback status</p>
@@ -102,12 +104,21 @@
           form="host-round-control-form"
           formaction="{{ session_restart_url }}"
           data-round-control="restart"
+          {% if current_round.locked_at %}hidden disabled{% endif %}
         >Restart</button>
+        <button
+          class="button"
+          type="submit"
+          form="host-round-control-form"
+          formaction="{{ session_next_round_url }}"
+          data-round-control="next"
+          {% if not current_round.locked_at or current_round.index >= 10 %}hidden disabled{% endif %}
+        >Start next round</button>
       </div>
 
       <div class="playback-metadata">
-        <p><strong>Track id:</strong> {{ current_round.track.spotify_track_id }}</p>
-        <p><strong>Offset:</strong> {{ current_round.offset_ms }} ms</p>
+        <p><strong>Track id:</strong> <span data-track-id>{{ current_round.track.spotify_track_id }}</span></p>
+        <p><strong>Offset:</strong> <span data-round-offset>{{ current_round.offset_ms }} ms</span></p>
         <p><strong>Answer options:</strong></p>
         <div data-answer-options>
           {% for option in current_round.answer_options %}
@@ -125,6 +136,6 @@
     </section>
   </main>
 
-  <script src="{% static 'game/spotify_player.js' %}?v=20260605n" defer></script>
-  <script src="{% static 'game/round.js' %}?v=20260605n" defer></script>
+  <script src="{% static 'game/spotify_player.js' %}?v=20260607c" defer></script>
+  <script src="{% static 'game/round.js' %}?v=20260607c" defer></script>
 {% endblock %}

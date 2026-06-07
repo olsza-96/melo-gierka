@@ -131,6 +131,13 @@
       },
       volume: 0.8,
     });
+    root._spotifyPlayer = player;
+    root._activateSpotifyPlayback = function () {
+      return player.activateElement();
+    };
+    root._pauseSpotifyPlayback = function () {
+      return player.pause();
+    };
 
     player.addListener("ready", async function (_payload) {
       const deviceId = _payload.device_id;

@@ -21,6 +21,16 @@ urlpatterns = [
         name="session-start-round",
     ),
     path(
+        "sessions/<str:code>/next-round",
+        views.session_next_round,
+        name="session-next-round",
+    ),
+    path(
+        "sessions/<str:code>/stop-playback",
+        views.session_stop_playback,
+        name="session-stop-playback",
+    ),
+    path(
         "sessions/<str:code>/answer",
         views.session_answer,
         name="session-answer",
