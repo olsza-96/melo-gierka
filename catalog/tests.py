@@ -1,7 +1,9 @@
 import pytest
+from django.core.management import call_command
+from django.db.models import Count
 from django.urls import reverse
 
-from catalog.models import MusicSet
+from catalog.models import MusicSet, Track
 from game.forms import HostSessionCreateForm
 from game.views import SPOTIFY_AUTH_SESSION_KEY, SPOTIFY_USER_SESSION_KEY
 
@@ -72,3 +74,25 @@ def test_host_create_form_uses_music_sets_as_choices():
 		"Pop Hits 2010s",
 		"Rock Classics",
 	]
+
+
+@pytest.mark.django_db
+def test_seed_catalog_loads_five_music_sets_with_tracks():
+	call_command("seed_catalog")
+
+	assert MusicSet.objects.count() == 5
+	assert Track.objects.count() >= 50
+
+
+@pytest.mark.django_db
+def test_catalog_capacity_supports_ten_round_sessions_after_seed():
+	call_command("seed_catalog")
+
+	music_sets = MusicSet.objects.annotate(track_count=Count("tracks")).order_by("name")
+
+	assert music_sets.count() == 5
+	assert all(music_set.track_count >= 10 for music_set in music_sets)
+	assert all(
+		music_set.tracks.values("artist").distinct().count() >= 4
+		for music_set in music_sets
+	)

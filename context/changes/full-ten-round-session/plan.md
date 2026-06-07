@@ -435,29 +435,29 @@ Rollback note: if the constraint-removal migration is rolled back while repeated
 
 #### Automated
 
-- [x] 3.1 Final-results view tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "final_results or finished"`.
-- [x] 3.2 Host/player route guard tests pass for finished and non-finished sessions: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "host_results or player_results or owner_guard"`.
-- [x] 3.3 Template regression tests pass for dynamic round labels and result links: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "host_round or player_round or lobby"`.
+- [x] 3.1 Final-results view tests pass: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "final_results or finished"`. — 0ca21aa
+- [x] 3.2 Host/player route guard tests pass for finished and non-finished sessions: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "host_results or player_results or owner_guard"`. — 0ca21aa
+- [x] 3.3 Template regression tests pass for dynamic round labels and result links: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "host_round or player_round or lobby"`. — 0ca21aa
 
 #### Manual
 
-- [x] 3.4 After round 10 locks, host and player browsers transition to dedicated final-results pages.
-- [x] 3.5 Final results show all top-score tied players as co-winners.
-- [x] 3.6 The full ranking includes every player and makes the bound player recognizable on the player page.
+- [x] 3.4 After round 10 locks, host and player browsers transition to dedicated final-results pages. — 0ca21aa
+- [x] 3.5 Final results show all top-score tied players as co-winners. — 0ca21aa
+- [x] 3.6 The full ranking includes every player and makes the bound player recognizable on the player page. — 0ca21aa
 
 ### Phase 4: Regression Coverage And Smoke Handoff
 
 #### Automated
 
-- [ ] 4.1 Full targeted S-04 suite passes: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "full_session or next_round or final_results or repeat_fallback"`.
-- [ ] 4.2 Catalog capacity tests pass: `DJANGO_DEBUG=True uv run pytest catalog/tests.py -k "seed or catalog_capacity"`.
-- [ ] 4.3 Full test suite passes: `DJANGO_DEBUG=True uv run pytest`.
-- [ ] 4.4 Static collection still passes: `DJANGO_DEBUG=True uv run python manage.py collectstatic --noinput`.
-- [ ] 4.5 Production-style checks remain acceptable: `DJANGO_DEBUG=False DJANGO_SECRET_KEY='<strong-placeholder>' DJANGO_ALLOWED_HOSTS=melo-gierka.fly.dev,localhost,127.0.0.1 uv run python manage.py check --deploy`.
+- [x] 4.1 Full targeted S-04 suite passes: `DJANGO_DEBUG=True uv run pytest game/tests.py -k "full_session or next_round or final_results or repeat_fallback"`.
+- [x] 4.2 Catalog capacity tests pass: `DJANGO_DEBUG=True uv run pytest catalog/tests.py -k "seed or catalog_capacity"`.
+- [x] 4.3 Full test suite passes: `DJANGO_DEBUG=True uv run pytest`.
+- [x] 4.4 Static collection still passes: `DJANGO_DEBUG=True uv run python manage.py collectstatic --noinput`.
+- [x] 4.5 Production-style checks remain acceptable: `DJANGO_DEBUG=False DJANGO_SECRET_KEY='<strong-placeholder>' DJANGO_ALLOWED_HOSTS=melo-gierka.fly.dev,localhost,127.0.0.1 uv run python manage.py check --deploy`.
 
 #### Manual
 
-- [ ] 4.6 A local host browser and at least one separate player browser complete all 10 rounds from lobby through final results.
-- [ ] 4.7 A timeout round with no answer still advances the session correctly and gives the missing player 0 points.
-- [ ] 4.8 A top-score tie displays co-winners on the final results page.
-- [ ] 4.9 Optional deployed Fly smoke repeats the 10-round path with real OAuth and Spotify browser playback when credentials and timing allow.
+- [x] 4.6 A local host browser and at least one separate player browser complete all 10 rounds from lobby through final results.
+- [x] 4.7 A timeout round with no answer still advances the session correctly and gives the missing player 0 points.
+- [x] 4.8 A top-score tie displays co-winners on the final results page.
+- [x] 4.9 Optional deployed Fly smoke repeats the 10-round path with real OAuth and Spotify browser playback when credentials and timing allow.

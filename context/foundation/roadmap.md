@@ -3,7 +3,7 @@ project: MeloGierka
 version: 1
 status: draft
 created: 2026-06-01
-updated: 2026-06-04
+updated: 2026-06-06
 prd_version: 1
 main_goal: market-feedback
 top_blocker: external
@@ -29,16 +29,16 @@ melo-gierka to indywidualna gra muzyczna na imprezie: każdy znajomy gra na swoi
 
 | ID    | Change ID                    | Outcome (user can …)                                                         | Prerequisites      | PRD refs                            | Status   |
 | ----- | ---------------------------- | ---------------------------------------------------------------------------- | ------------------ | ----------------------------------- | -------- |
-| F-01  | spotify-oauth-scaffold       | (foundation) gospodarz OAuth-loguje się do Spotify ze scope `streaming`       | —                  | FR-001, Access Control §Gospodarz   | ready    |
+| F-01  | spotify-oauth-scaffold       | (foundation) gospodarz OAuth-loguje się do Spotify ze scope `streaming`       | —                  | FR-001, Access Control §Gospodarz   | implemented |
 | F-02  | game-session-models          | (foundation) modele GameSession/Player/Round + cleanup TTL                    | —                  | NFR §Sesja ulotna, FR-002, FR-005   | implemented |
-| F-03  | mobile-template-skeleton     | (foundation) base templates + Whitenoise + mobile-first layout                | —                  | NFR §Mobile browsers                | ready    |
+| F-03  | mobile-template-skeleton     | (foundation) base templates + Whitenoise + mobile-first layout                | —                  | NFR §Mobile browsers                | implemented |
 | F-04  | session-state-polling        | (foundation) endpoint `/api/sessions/<code>/state` zwraca stan sesji do pollingu | F-02               | NFR §Lag ≤1s, FR-006                | implemented |
 | S-01  | host-creates-session         | gospodarz tworzy sesję (login Spotify → wybór zestawu → 4-znakowy kod)       | F-01, F-02, F-03   | FR-001, FR-002, FR-003, US-01       | implemented |
-| S-02  | player-joins-lobby           | gracz dołącza kodem + imieniem; gospodarz widzi listę graczy przez polling   | S-01, F-04         | FR-004, FR-005, FR-006, US-01       | proposed |
-| S-03  | first-playable-round         | host odtwarza 30s fragment, gracz wybiera spośród 4 opcji, dostaje punkty    | S-02               | FR-007, FR-008, FR-009, FR-010, FR-011, US-01 | proposed |
-| S-04  | full-ten-round-session       | pełna sesja 10 rund z ekranem wyników końcowych (NORTH STAR)                  | S-03               | FR-013, US-01, NFR §Lag ≤1s         | proposed |
+| S-02  | player-joins-lobby           | gracz dołącza kodem + imieniem; gospodarz widzi listę graczy przez polling   | S-01, F-04         | FR-004, FR-005, FR-006, US-01       | implemented |
+| S-03  | first-playable-round         | host odtwarza 30s fragment, gracz wybiera spośród 4 opcji, dostaje punkty    | S-02               | FR-007, FR-008, FR-009, FR-010, FR-011, US-01 | implemented |
+| S-04  | full-ten-round-session       | pełna sesja 10 rund z ekranem wyników końcowych (NORTH STAR)                  | S-03               | FR-013, US-01, NFR §Lag ≤1s         | implemented |
 | S-05  | per-round-scoreboard         | gracz widzi ranking po każdej rundzie (nice-to-have z PRD)                    | S-04               | FR-012                              | proposed |
-| S-06  | silent-spotify-token-refresh | gospodarz może zagrać 2+ sesje w jednym wieczorze bez ponownego logowania     | F-01               | FR-014                              | proposed |
+| S-06  | silent-spotify-token-refresh | gospodarz może zagrać 2+ sesje w jednym wieczorze bez ponownego logowania     | F-01               | FR-014                              | ready |
 
 ## Streams
 
@@ -75,7 +75,7 @@ Co jest już na miejscu w kodzie według stanu na 2026-06-01 (auto-zbadane + pot
 - **Blockers:** —
 - **Unknowns:** —
 - **Risk:** Spotify Dev App zarejestrowana 2026-06-01 (Client ID `5449c5cf…`) ze scope `streaming` + `user-read-email`, callback URLs whitelistowane (`https://melo-gierka.fly.dev/oauth/spotify/callback` prod, `http://127.0.0.1:8000/oauth/spotify/callback` dev). Sekrety w Fly secrets + lokalnym `.env`. Pozostałe ryzyko: scope `streaming` ma beta-limit ~25 unikalnych userów — dla v0 (4–6 znajomych) wystarczy; przy ekspansji wymaga Quota Extension Request.
-- **Status:** ready
+- **Status:** implemented
 
 ### F-02: Game session models + ephemeral cleanup
 
@@ -102,7 +102,7 @@ Co jest już na miejscu w kodzie według stanu na 2026-06-01 (auto-zbadane + pot
 - **Blockers:** —
 - **Unknowns:** —
 - **Risk:** Whitenoise misconfiguration łamie admin po deploy (per `infrastructure.md` Risk #4). Mitigacja: lokalny `docker build` + manual sanity check `/static/admin/css/base.css` przed pierwszym push do main.
-- **Status:** ready
+- **Status:** implemented
 
 ### F-04: Session state polling endpoint
 
@@ -145,7 +145,7 @@ Co jest już na miejscu w kodzie według stanu na 2026-06-01 (auto-zbadane + pot
 - **Unknowns:**
   - Czy lobby ma hard limit liczby graczy (PRD mówi "4–6 znajomych" ale to skala docelowa, nie limit)? Owner: agent. Block: no (default: brak hard limitu w v0; soft warning przy >10).
 - **Risk:** Pierwszy load test na F-04 — kilku graczy polling + jeden polling u hosta = ~6 req/sec sumarycznie. Jeśli lag pojawia się tu, fix na poziomie F-04 zanim S-04 dotknie 10 rund.
-- **Status:** proposed
+- **Status:** implemented
 
 ### S-03: Pierwsza grywalna runda end-to-end
 
@@ -159,7 +159,7 @@ Co jest już na miejscu w kodzie według stanu na 2026-06-01 (auto-zbadane + pot
   - Czy Spotify Web Playback SDK pozwoli na precyzyjny offset (`seek(track.duration_ms * random.uniform(0.2, 0.8))`)? PRD zakłada że tak (FR-008) ale nie zostało zweryfikowane. Spike wewnątrz `/10x-plan first-playable-round`. Owner: agent. Block: no.
   - Algorytm punktacji ważonej czasem — liniowa, wykładnicza, czy odejmowanie od bazy? PRD §FR-011 mówi tylko "szybciej = więcej; brak odpowiedzi = 0". Owner: user/agent. Block: no.
 - **Risk:** Najbardziej ryzykowny slice w roadmapie — całe ryzyko zewnętrznej zależności (`top_blocker=external`) materializuje się tu. Plan powinien zacząć od spike'a na Web Playback SDK z offsetem przed pisaniem reszty pętli rundy.
-- **Status:** proposed
+- **Status:** implemented
 
 ### S-04: Pełna 10-rundowa sesja z ekranem wyników (NORTH STAR)
 
@@ -172,7 +172,7 @@ Co jest już na miejscu w kodzie według stanu na 2026-06-01 (auto-zbadane + pot
 - **Unknowns:**
   - PRD §Open Question #5: zachowanie aplikacji gdy pojedynczy gracz ma lag > 1s — runda kontynuuje czy app czeka? Owner: user. Block: no (default: runda kontynuuje, opóźniony gracz dostaje 0 lub klik late z malymi punktami).
 - **Risk:** To jest gwiazda przewodnia. Wszystkie poprzednie slice'y mają sens tylko gdy ten działa end-to-end. Werifikacja na realnej imprezie 4–6 znajomych następuje POST-shipowaniu S-04 (nie jest częścią slice'a) — jeśli wyjdzie regresja na większej skali, otworzy się nowy slice scope'owany pod skalowanie.
-- **Status:** proposed
+- **Status:** implemented
 
 ### S-05: Scoreboard po każdej rundzie (nice-to-have)
 
@@ -197,22 +197,22 @@ Co jest już na miejscu w kodzie według stanu na 2026-06-01 (auto-zbadane + pot
 - **Unknowns:**
   - Czy refresh token jest issuowany dla scope `streaming`? Owner: agent (verify w spike). Block: no.
 - **Risk:** PRD §FR-014: relewantne dopiero przy 2+ sesjach w jednym wieczorze (rzadki przypadek). Może zostać niezrealizowany w v0 bez wpływu na Success Criteria.
-- **Status:** proposed
+- **Status:** ready
 
 ## Backlog Handoff
 
 | Roadmap ID | Change ID                    | Suggested issue title                                              | Ready for `/10x-plan` | Notes                                                       |
 | ---------- | ---------------------------- | ------------------------------------------------------------------ | --------------------- | ----------------------------------------------------------- |
-| F-01       | spotify-oauth-scaffold       | Spotify OAuth scaffold (host login, scope streaming)               | yes                   | Run `/10x-plan spotify-oauth-scaffold` — sekrety już w Fly + `.env` |
+| F-01       | spotify-oauth-scaffold       | Spotify OAuth scaffold (host login, scope streaming)               | no                    | Implemented through the host/session flow; standalone change folder was not the delivery vehicle |
 | F-02       | game-session-models          | Game session / player / round models + cleanup TTL                 | no                    | Implemented and impl-reviewed on 2026-06-04                  |
-| F-03       | mobile-template-skeleton     | Mobile-first base templates + Whitenoise                           | yes                   | Run `/10x-plan mobile-template-skeleton`                     |
-| F-04       | session-state-polling        | Session state JSON polling endpoint                                | yes                   | F-02 is implemented; this is the next unblocked foundation to plan |
+| F-03       | mobile-template-skeleton     | Mobile-first base templates + Whitenoise                           | no                    | Implemented in the live app baseline: base template, shared CSS, Whitenoise, `STATIC_ROOT`, Docker collectstatic |
+| F-04       | session-state-polling        | Session state JSON polling endpoint                                | no                    | Implemented and impl-reviewed on 2026-06-04                  |
 | S-01       | host-creates-session         | Gospodarz tworzy sesję (login Spotify + wybór zestawu + kod)       | no                    | Implemented and impl-reviewed on 2026-06-04                  |
-| S-02       | player-joins-lobby           | Gracz dołącza do lobby + host widzi listę graczy                   | no                    | Wait for S-01 + F-04                                         |
-| S-03       | first-playable-round         | Pierwsza grywalna runda end-to-end (Spotify SDK + scoring)         | no                    | Wait for S-02; spike na Web Playback SDK w trakcie `/10x-plan` |
-| S-04       | full-ten-round-session       | Pełna 10-rundowa sesja + ekran wyników (NORTH STAR)                | no                    | Wait for S-03                                                |
+| S-02       | player-joins-lobby           | Gracz dołącza do lobby + host widzi listę graczy                   | no                    | Implemented and impl-reviewed on 2026-06-05                  |
+| S-03       | first-playable-round         | Pierwsza grywalna runda end-to-end (Spotify SDK + scoring)         | no                    | Implemented, deployed, smoked, and impl-reviewed on 2026-06-06 |
+| S-04       | full-ten-round-session       | Pełna 10-rundowa sesja + ekran wyników (NORTH STAR)                | no                    | Implemented, deployed to dev, and smoked on 2026-06-07       |
 | S-05       | per-round-scoreboard         | Scoreboard po każdej rundzie (FR-012 nice-to-have)                 | no                    | Wait for S-04                                                |
-| S-06       | silent-spotify-token-refresh | Cichy refresh tokenu Spotify (FR-014 nice-to-have)                 | no                    | Wait for F-01                                                |
+| S-06       | silent-spotify-token-refresh | Cichy refresh tokenu Spotify (FR-014 nice-to-have)                 | yes                   | Unblocked by F-01, but lower priority than S-04 north-star flow |
 
 ## Open Roadmap Questions
 

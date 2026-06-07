@@ -1941,6 +1941,127 @@ def test_next_round_rejects_duplicate_after_advance_without_duplicate(client, se
 
 
 @pytest.mark.django_db
+def test_full_session_happy_path_completes_ten_rounds_with_unique_tracks(client, session, track):
+    host_client = client
+    player_client = Client()
+    tracks = [track]
+    tracks.extend(_add_round_tracks(session, count=9, prefix="full-session-track", start=2))
+    joined_player = Player.objects.create(session=session, name="Adam")
+    _set_host_auth(host_client)
+    _bind_host_session(host_client, session)
+    _set_playback_ready(host_client, session, device_id="device-42")
+    _bind_player_session(player_client, session, joined_player)
+
+    with mock.patch(
+        "game.views._resolve_start_round_playback_device",
+        return_value={"id": "device-42", "is_restricted": False},
+    ), mock.patch(
+        "game.views._wait_for_active_playback_device",
+        return_value={"id": "device-42", "is_restricted": False, "is_active": True},
+    ), mock.patch("game.views.spotify_auth.fetch_track_details") as fetch_track_details, mock.patch(
+        "game.views.spotify_auth.transfer_playback"
+    ), mock.patch("game.views.spotify_auth.start_playback"):
+        fetch_track_details.return_value = {
+            "spotify_track_id": "track-id",
+            "is_playable": True,
+            "restriction_reason": None,
+        }
+
+        start_response = host_client.post(reverse("game:session-start-round", kwargs={"code": session.code}))
+        assert start_response.status_code == 200
+
+        for round_index in range(1, game_views.SESSION_ROUND_LIMIT + 1):
+            current_round = Round.objects.get(session=session, index=round_index)
+            answer_response = player_client.post(
+                reverse("game:session-answer", kwargs={"code": session.code}),
+                data=json.dumps({"artist": current_round.track.artist}),
+                content_type="application/json",
+            )
+            assert answer_response.status_code == 200
+
+            if round_index < game_views.SESSION_ROUND_LIMIT:
+                next_response = host_client.post(
+                    reverse("game:session-next-round", kwargs={"code": session.code}),
+                    HTTP_X_REQUESTED_WITH="fetch",
+                )
+                assert next_response.status_code == 200
+
+    session.refresh_from_db()
+    joined_player.refresh_from_db()
+    used_track_ids = list(session.rounds.order_by("index").values_list("track_id", flat=True))
+    host_results = host_client.get(reverse("game_host:host-results", kwargs={"code": session.code}))
+    player_results = player_client.get(reverse("game_host:player-results", kwargs={"code": session.code}))
+
+    assert session.status == GameSession.Status.FINISHED
+    assert session.finished_at is not None
+    assert session.rounds.count() == game_views.SESSION_ROUND_LIMIT
+    assert len(set(used_track_ids)) == game_views.SESSION_ROUND_LIMIT
+    assert set(used_track_ids) == {created_track.pk for created_track in tracks}
+    assert joined_player.score > 0
+    assert host_results.status_code == 200
+    assert player_results.status_code == 200
+    assert "Adam (you)" in player_results.content.decode()
+
+
+@pytest.mark.django_db
+def test_full_session_timeout_round_missing_answer_scores_zero_and_can_advance(client, session, track):
+    next_track = Track.objects.create(
+        music_set=session.music_set,
+        spotify_track_id="next-track",
+        artist="Artist Next",
+        title="Next Title",
+        duration_ms=180_000,
+    )
+    _add_round_tracks(session, count=3, prefix="timeout-option")
+    joined_player = Player.objects.create(session=session, name="Adam")
+    _set_host_auth(client)
+    _bind_host_session(client, session)
+    _set_playback_ready(client, session, device_id="device-42")
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now() - timedelta(seconds=60)
+    session.save(update_fields=["status", "started_at"])
+    current_round = Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now() - timedelta(seconds=31),
+        deadline_at=timezone.now() - timedelta(seconds=1),
+    )
+
+    state_response = client.get(reverse("game:session-state", kwargs={"code": session.code}))
+    current_round.refresh_from_db()
+    joined_player.refresh_from_db()
+
+    assert state_response.status_code == 200
+    assert state_response.json()["current_round"]["phase"] == "locked"
+    assert current_round.locked_at is not None
+    assert not Answer.objects.filter(round=current_round, player=joined_player).exists()
+    assert joined_player.score == 0
+
+    with mock.patch("game.views._choose_round_track", return_value=next_track), mock.patch(
+        "game.views._build_answer_options",
+        return_value=["Artist 1", "Artist 2", "Artist 3", next_track.artist],
+    ), mock.patch("game.views._build_round_offset_ms", return_value=22_000), mock.patch(
+        "game.views._resolve_start_round_playback_device",
+        return_value={"id": "device-42", "is_restricted": False},
+    ), mock.patch(
+        "game.views._wait_for_active_playback_device",
+        return_value={"id": "device-42", "is_restricted": False, "is_active": True},
+    ), mock.patch("game.views.spotify_auth.transfer_playback"), mock.patch(
+        "game.views.spotify_auth.start_playback"
+    ):
+        next_response = client.post(
+            reverse("game:session-next-round", kwargs={"code": session.code}),
+            HTTP_X_REQUESTED_WITH="fetch",
+        )
+
+    assert next_response.status_code == 200
+    assert Round.objects.filter(session=session, index=2, track=next_track).exists()
+
+
+@pytest.mark.django_db
 def test_next_round_rejects_after_round_limit_and_finishes_session(client, session, track):
     _add_round_tracks(session, count=4)
     Player.objects.create(session=session, name="Adam")
