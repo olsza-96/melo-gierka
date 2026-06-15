@@ -119,10 +119,10 @@ The `Round.save` instrumentation counts calls where `"locked_at" in (update_fiel
 
 #### Automated
 
-- [x] 1.1 New test passes: `uv run pytest game/tests.py -k concurrent`
-- [x] 1.2 No regressions: `uv run pytest game/tests.py`
+- [x] 1.1 New test passes: `uv run pytest game/tests.py -k concurrent` — 43b66a5
+- [x] 1.2 No regressions: `uv run pytest game/tests.py` — 43b66a5
 
 #### Manual
 
-- [ ] 1.3 `double_lifecycle` wrapper matches the real concurrent-entry shape described above
-- [ ] 1.4 Inline SQLite gap comment is present and accurate
+- [x] 1.3 `double_lifecycle` wrapper matches the real concurrent-entry shape described above — 43b66a5
+- [x] 1.4 Inline SQLite gap comment is present and accurate — 43b66a5
