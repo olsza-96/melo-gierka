@@ -2578,6 +2578,60 @@ def test_session_state_finishes_session_when_round_ten_expires(client, session, 
 
 
 @pytest.mark.django_db
+def test_concurrent_expire_polls_lock_round_exactly_once(client, session, track, monkeypatch):
+    # NOTE: select_for_update is silently ignored on SQLite. The real serialization
+    # guard in production (PostgreSQL) is the row lock inside _apply_session_lifecycle_for_code.
+    # This test exercises the secondary idempotency guard: _round_is_expired returns False
+    # once locked_at is set, so a second concurrent call becomes a no-op. We simulate
+    # the race by calling the original lifecycle function twice in sequence, which mirrors
+    # what two concurrent pollers would do if both entered before either committed.
+    session.status = GameSession.Status.PLAYING
+    session.started_at = timezone.now() - timedelta(seconds=60)
+    session.save(update_fields=["status", "started_at"])
+    current_round = Round.objects.create(
+        session=session,
+        index=1,
+        track=track,
+        offset_ms=30_000,
+        answer_options=["Artist A", "Artist B", "Artist C", track.artist],
+        started_at=timezone.now() - timedelta(seconds=31),
+        deadline_at=timezone.now() - timedelta(seconds=1),
+    )
+
+    original_lifecycle = game_views._apply_session_lifecycle_for_code
+
+    def double_lifecycle(code):
+        # Simulate two concurrent pollers entering the lifecycle function before either
+        # commits. On PostgreSQL the SELECT FOR UPDATE row lock serializes them; this
+        # tests the secondary idempotency guard: _round_is_expired returns False once
+        # locked_at is set, so the second call is a no-op.
+        original_lifecycle(code)
+        original_lifecycle(code)
+
+    monkeypatch.setattr(game_views, "_apply_session_lifecycle_for_code", double_lifecycle)
+
+    original_save = Round.save
+    lock_save_calls = []
+
+    def tracking_save(self, *args, update_fields=None, **kwargs):
+        if update_fields and "locked_at" in update_fields:
+            lock_save_calls.append(update_fields)
+        return original_save(self, *args, update_fields=update_fields, **kwargs)
+
+    monkeypatch.setattr(Round, "save", tracking_save)
+
+    response = client.get(reverse("game:session-state", kwargs={"code": session.code}))
+
+    current_round.refresh_from_db()
+    assert response.status_code == 200
+    assert current_round.locked_at is not None
+    assert len(lock_save_calls) == 1, (
+        f"Expected locked_at to be written exactly once, got {len(lock_save_calls)} call(s)"
+    )
+    assert response.json()["current_round"]["phase"] == "locked"
+
+
+@pytest.mark.django_db
 def test_player_lobby_renders_current_player_polling_hooks(client, session):
     client.post(
         reverse("game_host:player-join"),
