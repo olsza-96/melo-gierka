@@ -13,3 +13,10 @@ wheels/
 .claude/
 
 .env
+
+# Local editor/system files
+.DS_Store
+.vscode/
+
+# Django collected static output
+staticfiles/
