@@ -15,18 +15,16 @@ RUN uv sync --frozen --no-dev
 
 COPY . .
 
+ENV PATH="/app/.venv/bin:$PATH"
+
 # DJANGO_DEBUG=True bypasses the SECRET_KEY guard for these build-time
 # management commands. Runtime CMD inherits DEBUG=False from fly.toml [env]
 # and the real DJANGO_SECRET_KEY from `fly secrets`.
 RUN export DJANGO_DEBUG=True \
- && uv run python manage.py migrate --noinput \
- && uv run python manage.py seed_catalog \
- && uv run python manage.py collectstatic --noinput
+ && python manage.py migrate --noinput \
+ && python manage.py seed_catalog \
+ && python manage.py collectstatic --noinput
 
 EXPOSE 8080
 
-CMD ["uv", "run", "gunicorn", "melo_gierka.wsgi", \
-     "--workers", "1", "--threads", "4", \
-     "--bind", "0.0.0.0:8080", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-"]
+CMD gunicorn melo_gierka.wsgi --workers 1 --threads 4 --bind 0.0.0.0:8080 --access-logfile - --error-logfile -
