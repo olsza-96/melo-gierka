@@ -10,6 +10,8 @@ import socket
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -35,6 +37,20 @@ def _load_local_env(env_path: Path) -> None:
             os.environ.setdefault(key, value)
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    return os.environ.get(name, str(default)).lower() == "true"
+
+
+def _env_float(name: str, default: float = 0.0) -> float:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
 RAW_DEBUG = os.environ.get("DJANGO_DEBUG", "False").lower() == "true"
 
 if RAW_DEBUG:
@@ -48,6 +64,25 @@ DEV_SECRET_KEY_SENTINEL = "insecure-dev-key-do-not-use-in-prod"
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", DEV_SECRET_KEY_SENTINEL)
 
 DEBUG = os.environ.get("DJANGO_DEBUG", "False").lower() == "true"
+
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
+SENTRY_ENVIRONMENT = os.environ.get(
+    "SENTRY_ENVIRONMENT",
+    "development" if DEBUG else "production",
+).strip()
+SENTRY_TRACES_SAMPLE_RATE = _env_float("SENTRY_TRACES_SAMPLE_RATE", 0.0)
+SENTRY_SEND_DEFAULT_PII = _env_bool("SENTRY_SEND_DEFAULT_PII", False)
+SENTRY_RELEASE = os.environ.get("SENTRY_RELEASE") or os.environ.get("SOURCE_VERSION")
+
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration()],
+        environment=SENTRY_ENVIRONMENT,
+        traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
+        send_default_pii=SENTRY_SEND_DEFAULT_PII,
+        release=SENTRY_RELEASE,
+    )
 
 DEFAULT_SPOTIFY_REDIRECT_URI = (
     "http://127.0.0.1:8000/oauth/spotify/callback"

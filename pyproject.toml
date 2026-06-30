@@ -8,6 +8,7 @@ dependencies = [
     "django>=5.2.14",
     "gunicorn>=26.0.0",
     "httpx>=0.28.1",
+    "sentry-sdk>=2.64.0",
     "whitenoise>=6.12.0",
 ]
 
