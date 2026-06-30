@@ -6,15 +6,14 @@
   <main class="landing-grid">
     <section class="panel hero-panel">
       <p class="eyebrow">party game setup</p>
-      <h1>Everyone plays on their own phone. The host runs the room.</h1>
-      <p class="lede">
-        Melo-gierka is moving from backend scaffolding into the first real host flow.
-        In this phase the host signs in with Spotify and chooses a music set; player join stays intentionally parked.
+      <h1>Play on your phone. Host from one screen.</h1>
+      <p class="lede support-copy">
+        Host signs in with Spotify, opens a session, and players join with a 4-digit code.
       </p>
 
       {% if not host_is_authenticated %}
         <a class="button button-primary" href="{{ spotify_login_url }}">Log in with Spotify</a>
-        <p class="microcopy">Spotify Premium host account required for the later playback slice.</p>
+        <p class="microcopy support-copy">Spotify Premium host account required.</p>
       {% else %}
         <div class="host-status">
           <p class="host-status-label">Signed in as</p>
@@ -28,9 +27,7 @@
       {% if host_is_authenticated %}
         <p class="eyebrow">host setup</p>
         <h2>Create your session</h2>
-        <p class="panel-copy">
-          Choose one of the seeded sets and move straight into the first host lobby with a 4-digit code.
-        </p>
+        <p class="panel-copy support-copy">Choose a set and open the host lobby code.</p>
 
         <form class="host-form" method="post" action="{% url 'game_host:session-create' %}">
           {% csrf_token %}
@@ -46,24 +43,20 @@
           <button class="button button-secondary" type="submit">Create session</button>
         </form>
 
-        <p class="panel-footnote">{{ music_set_count }} seeded set{{ music_set_count|pluralize }} currently available.</p>
+        <p class="panel-footnote support-copy">{{ music_set_count }} set{{ music_set_count|pluralize }} ready.</p>
       {% else %}
         <p class="eyebrow">host setup</p>
         <h2>Host setup unlocks after Spotify login</h2>
-        <p class="panel-copy">
-          Once signed in, this panel will show the five current placeholder music sets and the session-create form.
-        </p>
+        <p class="panel-copy support-copy">Sign in and create a session in one step.</p>
       {% endif %}
     </section>
 
     <section class="panel player-panel">
       <p class="eyebrow">player path</p>
       <h2>Join a game</h2>
-      <p class="panel-copy">
-        Players can now move from the landing page straight into the join form with a session code and name.
-      </p>
+      <p class="panel-copy support-copy">Enter code and name to join the lobby.</p>
       <a class="button button-secondary" href="{% url 'game_host:player-join' %}">Open player join</a>
-      <p class="microcopy">Use the 4-digit code from the host screen to enter the shared lobby.</p>
+      <p class="microcopy support-copy">Use the host 4-digit code.</p>
     </section>
   </main>
 {% endblock %}
