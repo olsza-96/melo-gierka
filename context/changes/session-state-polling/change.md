@@ -1,7 +1,7 @@
 ---
 change_id: session-state-polling
 title: Session state polling endpoint
-status: implemented
+status: impl_reviewed
 created: 2026-06-04
 updated: 2026-06-04
 archived_at: null
