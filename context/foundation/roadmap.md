@@ -37,8 +37,8 @@ melo-gierka to indywidualna gra muzyczna na imprezie: każdy znajomy gra na swoi
 | S-02  | player-joins-lobby           | gracz dołącza kodem + imieniem; gospodarz widzi listę graczy przez polling   | S-01, F-04         | FR-004, FR-005, FR-006, US-01       | implemented |
 | S-03  | first-playable-round         | host odtwarza 30s fragment, gracz wybiera spośród 4 opcji, dostaje punkty    | S-02               | FR-007, FR-008, FR-009, FR-010, FR-011, US-01 | implemented |
 | S-04  | full-ten-round-session       | pełna sesja 10 rund z ekranem wyników końcowych (NORTH STAR)                  | S-03               | FR-013, US-01, NFR §Lag ≤1s         | implemented |
-| S-05  | per-round-scoreboard         | gracz widzi ranking po każdej rundzie (nice-to-have z PRD)                    | S-04               | FR-012                              | proposed |
-| S-06  | silent-spotify-token-refresh | gospodarz może zagrać 2+ sesje w jednym wieczorze bez ponownego logowania     | F-01               | FR-014                              | ready |
+| S-05  | per-round-scoreboard         | gracz widzi ranking po każdej rundzie (nice-to-have z PRD)                    | S-04               | FR-012                              | implemented |
+| S-06  | silent-spotify-token-refresh | gospodarz może zagrać 2+ sesje w jednym wieczorze bez ponownego logowania     | F-01               | FR-014                              | implemented |
 
 ## Streams
 
@@ -53,14 +53,14 @@ Pomoc nawigacyjna — grupuje pozycje w ramach wspólnego łańcucha zależnośc
 
 ## Baseline
 
-Co jest już na miejscu w kodzie według stanu na 2026-06-01 (auto-zbadane + potwierdzone). Foundations poniżej zakładają obecność tych elementów i NIE odbudowują ich.
+Co jest już na miejscu w kodzie według stanu na 2026-06-30 (auto-zbadane + potwierdzone). Foundations poniżej zakładają obecność tych elementów i NIE odbudowują ich.
 
-- **Frontend:** absent — brak templates dir, brak static, widoki zwracają plain text / JSON.
-- **Backend / API:** partial — app `catalog` z `/` (lista zestawów) i `/health` (`catalog/views.py`, `catalog/urls.py:8-9`). Brak endpointów sesji/gry.
-- **Data:** partial — modele `MusicSet` + `Track` w `catalog/models.py:4-32`, migracje, SQLite, seed fixture. Brak modeli `GameSession`/`Player`/`Round`.
-- **Auth:** absent — `django.contrib.auth` zainstalowane ale nieużywane (nieistotne dla produktu); brak kodu Spotify OAuth ani logiki tożsamości gracza.
-- **Deploy / infra:** present — `fly.toml` (ams, `auto_stop_machines=off`, `min_machines_running=1`), `Dockerfile`, `.github/workflows/fly-deploy.yml` auto-deploy. App żyje, deploy plan w `context/deployment/deploy-plan.md`.
-- **Observability:** partial — `/health` zwraca JSON, logging INFO w `melo_gierka/settings.py:150-167`. Brak Sentry / OTel / structured logs.
+- **Frontend:** present — komplet widoków hosta i gracza w `game/templates/game/` + wspólny layout (`melo_gierka/templates/base.html`) i assety w `game/static/game/`.
+- **Backend / API:** present — endpointy aplikacyjne i API sesji/rund działają (`catalog/urls.py`, `game/urls.py`, `game/api_urls.py`), w tym polling stanu i akcje rundowe.
+- **Data:** present — modele `MusicSet`/`Track` (`catalog/models.py`) oraz `GameSession`/`Player`/`Round`/`Answer` (`game/models.py`) z migracjami, fixture katalogu i komendą cleanup sesji.
+- **Auth:** present — Spotify OAuth hosta + odświeżanie tokenu i guard ownership sesji; tożsamość gracza wiązana przez session binding (`game/views.py`).
+- **Deploy / infra:** present — `fly.toml`, `Dockerfile`, workflow `.github/workflows/fly-deploy.yml` (push do `main`) i ustawienia produkcyjne Django pod Fly.
+- **Observability:** present — `/health`, logowanie aplikacji oraz integracja Sentry konfigurowana przez env (`SENTRY_DSN`, `SENTRY_ENVIRONMENT`) z komendą smoke-test.
 
 ## Foundations
 
@@ -184,7 +184,7 @@ Co jest już na miejscu w kodzie według stanu na 2026-06-01 (auto-zbadane + pot
 - **Blockers:** —
 - **Unknowns:** —
 - **Risk:** Czysto UI — modele i state z S-04 wystarczą. Sequencing tu, nie wcześniej: PRD demoteł FR-012 do nice-to-have świadomie, ekran końcowy w S-04 wystarcza na pierwszą sesję.
-- **Status:** proposed
+- **Status:** implemented
 
 ### S-06: Cichy refresh tokenu Spotify (nice-to-have)
 
@@ -197,7 +197,7 @@ Co jest już na miejscu w kodzie według stanu na 2026-06-01 (auto-zbadane + pot
 - **Unknowns:**
   - Czy refresh token jest issuowany dla scope `streaming`? Owner: agent (verify w spike). Block: no.
 - **Risk:** PRD §FR-014: relewantne dopiero przy 2+ sesjach w jednym wieczorze (rzadki przypadek). Może zostać niezrealizowany w v0 bez wpływu na Success Criteria.
-- **Status:** ready
+- **Status:** implemented
 
 ## Backlog Handoff
 
@@ -211,8 +211,8 @@ Co jest już na miejscu w kodzie według stanu na 2026-06-01 (auto-zbadane + pot
 | S-02       | player-joins-lobby           | Gracz dołącza do lobby + host widzi listę graczy                   | no                    | Implemented and impl-reviewed on 2026-06-05                  |
 | S-03       | first-playable-round         | Pierwsza grywalna runda end-to-end (Spotify SDK + scoring)         | no                    | Implemented, deployed, smoked, and impl-reviewed on 2026-06-06 |
 | S-04       | full-ten-round-session       | Pełna 10-rundowa sesja + ekran wyników (NORTH STAR)                | no                    | Implemented, deployed to dev, and smoked on 2026-06-07       |
-| S-05       | per-round-scoreboard         | Scoreboard po każdej rundzie (FR-012 nice-to-have)                 | no                    | Wait for S-04                                                |
-| S-06       | silent-spotify-token-refresh | Cichy refresh tokenu Spotify (FR-014 nice-to-have)                 | yes                   | Unblocked by F-01, but lower priority than S-04 north-star flow |
+| S-05       | per-round-scoreboard         | Scoreboard po każdej rundzie (FR-012 nice-to-have)                 | no                    | Implemented in round surfaces (`host_round` / `player_round`) with live score rendering from session polling |
+| S-06       | silent-spotify-token-refresh | Cichy refresh tokenu Spotify (FR-014 nice-to-have)                 | no                    | Implemented: expired Spotify auth payload refreshes before host flow rendering |
 
 ## Open Roadmap Questions
 
@@ -237,4 +237,5 @@ Co jest już na miejscu w kodzie według stanu na 2026-06-01 (auto-zbadane + pot
 
 ## Done
 
-(Pusta przy pierwszej generacji. `/10x-archive` doda wpisy gdy zmiany z odpowiadającymi Change ID będą archiwizowane.)
+- 2026-06-30: `S-05 per-round-scoreboard` uznany za zrealizowany i zsynchronizowany ze stanem kodu.
+- 2026-06-30: `S-06 silent-spotify-token-refresh` uznany za zrealizowany i zsynchronizowany ze stanem kodu.
