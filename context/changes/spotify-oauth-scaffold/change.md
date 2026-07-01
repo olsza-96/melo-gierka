@@ -1,9 +1,9 @@
 ---
 change_id: spotify-oauth-scaffold
 title: Spotify OAuth scaffold
-status: new
+status: implemented
 created: 2026-06-02
-updated: 2026-06-02
+updated: 2026-07-01
 archived_at: null
 ---
 
@@ -23,3 +23,10 @@ Lifted from roadmap **F-01** (`@context/foundation/roadmap.md`). GitHub issue: h
 - Sekrety wpisane: `SPOTIFY_CLIENT_ID` + `SPOTIFY_CLIENT_SECRET` w Fly secrets (`fly secrets list -a melo-gierka` powinno potwierdzić) oraz w lokalnym `.env` (gitignored).
 
 **Beta-limit ryzyko:** scope `streaming` ma limit ~25 unikalnych userów; dla v0 (4–6 znajomych) wystarczy, ale wymaga Quota Extension Request przy ekspansji.
+
+**Implementation status update (2026-07-01):**
+- OAuth scaffold is implemented in host flow (`spotify_login`, `spotify_callback`, `spotify_logout`) with PKCE state+verifier handling and session storage for auth/profile payload.
+- Routes are registered under `game_host` for login/callback/logout.
+- Token refresh helper path is present and used when cached access token is close to expiry.
+- Verification passed:
+	- `DJANGO_DEBUG=True uv run pytest game/tests.py -k "spotify_login or spotify_callback or spotify_logout" -q`
