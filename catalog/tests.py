@@ -13,6 +13,30 @@ SPOTIFY_TRACK_ID_RE = re.compile(r"^[A-Za-z0-9]{22}$")
 MIN_TRACKS_PER_SET = 10
 MIN_DISTINCT_ARTISTS_PER_SET = 4
 
+GENRE_GUARDRAILS = {
+	"indie-mix": {
+		"forbidden_artists": {
+			"Billie Eilish",
+			"Dua Lipa",
+			"The Weeknd",
+		},
+	},
+	"dance-hits": {
+		"forbidden_artists": {
+			"Arctic Monkeys",
+			"The Strokes",
+			"Tame Impala",
+		},
+	},
+	"polish-hits": {
+		"forbidden_artists": {
+			"Calvin Harris",
+			"Daft Punk",
+			"David Guetta",
+		},
+	},
+}
+
 
 def _build_gate_compliant_catalog(*, tracks_per_set: int = 10, artist_pool: int = 10):
 	"""Build deterministic in-memory catalog payload used by quality gate tests."""
@@ -66,6 +90,20 @@ def _quality_gate_violations(sets):
 				)
 			seen_ids.add(spotify_track_id)
 			global_seen_ids.add(spotify_track_id)
+
+	return violations
+
+
+def _genre_guardrail_violations(*, music_set_slug, artists):
+	rules = GENRE_GUARDRAILS.get(music_set_slug)
+	if not rules:
+		return []
+
+	violations = []
+	forbidden = rules.get("forbidden_artists", set())
+	found_forbidden = sorted(artists.intersection(forbidden))
+	for artist in found_forbidden:
+		violations.append(f"{music_set_slug}: forbidden_artist={artist}")
 
 	return violations
 
@@ -181,6 +219,20 @@ def test_seeded_catalog_has_no_cross_set_track_duplicates():
 	spotify_ids = list(Track.objects.values_list("spotify_track_id", flat=True))
 
 	assert len(spotify_ids) == len(set(spotify_ids))
+
+
+@pytest.mark.django_db
+def test_seeded_catalog_respects_genre_guardrails():
+	call_command("seed_catalog")
+
+	violations = []
+	for music_set in MusicSet.objects.prefetch_related("tracks"):
+		artists = set(music_set.tracks.values_list("artist", flat=True))
+		violations.extend(
+			_genre_guardrail_violations(music_set_slug=music_set.slug, artists=artists)
+		)
+
+	assert violations == []
 
 
 @pytest.mark.django_db
