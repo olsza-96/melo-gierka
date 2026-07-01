@@ -16,6 +16,7 @@ Projekt jest zbudowany jako MVP w Django i skupia się na:
 - uv do zarządzania zależnościami
 - SQLite (lokalnie)
 - Spotify OAuth dla hosta
+  - aktualne scope: `streaming`, `user-read-email`, `user-read-private`, `user-modify-playback-state`, `user-read-playback-state`
 - Sentry (opcjonalnie, przez `SENTRY_DSN`)
 - Deploy: Fly.io
 
@@ -73,6 +74,13 @@ Przykłady uruchamiania wybranych testów:
 ```bash
 DJANGO_DEBUG=True uv run pytest game/tests.py -k session_state
 DJANGO_DEBUG=True uv run pytest game/tests/test_sentry_command.py -q
+DJANGO_DEBUG=True uv run pytest game/tests.py -k "spotify_login or spotify_callback or spotify_logout" -q
+```
+
+Testy walidacji gatunków playlist seedowanych:
+
+```bash
+DJANGO_DEBUG=True uv run pytest catalog/tests.py -k genre_guardrails -q
 ```
 
 Testy E2E (Playwright) znajdują się w `tests/e2e/` i wymagają skonfigurowanego środowiska Playwright.
@@ -153,7 +161,8 @@ Deploy produkcyjny jest skonfigurowany na Fly.io:
 **Rozwiązanie**:
 ```bash
 uv sync  # zainstaluj dev zależności
-uv run pytest --playwright-version  # weryfikuj
+uv run playwright install  # doinstaluj przeglądarki Playwright
+DJANGO_DEBUG=True uv run pytest tests/e2e -q
 ```
 
 ## Dokumentacja produktowa
